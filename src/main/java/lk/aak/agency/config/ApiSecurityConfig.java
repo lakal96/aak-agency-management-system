@@ -76,7 +76,14 @@ public class ApiSecurityConfig {
                                 "/api/v1/cheques/**",
                                 "/api/v1/collections/**",
                                 "/api/v1/shop-returns/**",
-                                "/api/v1/supplier-returns/**"
+                                "/api/v1/supplier-returns/**",
+                                "/api/v1/employees/**",
+                                "/api/v1/attendance/**",
+                                "/api/v1/advances/**",
+                                "/api/v1/salary/**",
+                                "/api/v1/vehicles/**",
+                                "/api/v1/routes/**",
+                                "/api/v1/delivery-trips/**"
                         ).hasAnyRole("ADMIN", "OFFICE")
                         .anyRequest().authenticated()
                 )
