@@ -1,6 +1,7 @@
 package lk.aak.agency.config;
 
 import lk.aak.agency.service.CustomUserDetailsService;
+import org.springframework.core.annotation.Order;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -43,11 +44,15 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http)
             throws Exception {
 
         http
+                // The REST API (/api/**) has its own stateless JWT-based chain - see ApiSecurityConfig.
+                .securityMatcher(request -> !request.getRequestURI().startsWith("/api/"))
+
                 .userDetailsService(
                         customUserDetailsService
                 )

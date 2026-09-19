@@ -38,6 +38,17 @@ public class CustomerService {
         );
     }
 
+    public Page<Customer> search(String keyword, int page, int size) {
+        return customerRepository.search(
+                keyword,
+                PageRequest.of(
+                        Math.max(page, 0),
+                        Math.max(size, 1),
+                        Sort.by(Sort.Direction.ASC, "customerName")
+                )
+        );
+    }
+
     public Optional<Customer> getCustomerById(Long id) {
         return customerRepository.findById(id);
     }

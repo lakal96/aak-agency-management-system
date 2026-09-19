@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -61,4 +63,11 @@ public interface SalesInvoiceRepository
      * Bills currently assigned to a given delivery trip.
      */
     List<SalesInvoice> findByDeliveryTripIdOrderByIdAsc(Long deliveryTripId);
+
+    @Query("SELECT COALESCE(SUM(i.netAmount), 0) FROM SalesInvoice i WHERE i.invoiceDate BETWEEN :from AND :to")
+    BigDecimal sumNetAmountBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    long countByPaymentStatusIn(List<String> paymentStatuses);
+
+    List<SalesInvoice> findByPaymentStatusIn(List<String> paymentStatuses);
 }
