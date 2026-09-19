@@ -1,6 +1,7 @@
 package lk.aak.agency.dto.api;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 public class DashboardSummaryResponse {
@@ -17,6 +18,7 @@ public class DashboardSummaryResponse {
     private final long outOfStockCount;
     private final BigDecimal totalOwedToSupplier;
     private final long pendingChequeCount;
+    private final List<TrendPoint> salesTrend;
     private final List<RecentActivity> recentActivity;
 
     public DashboardSummaryResponse(
@@ -32,6 +34,7 @@ public class DashboardSummaryResponse {
             long outOfStockCount,
             BigDecimal totalOwedToSupplier,
             long pendingChequeCount,
+            List<TrendPoint> salesTrend,
             List<RecentActivity> recentActivity) {
 
         this.totalCustomers = totalCustomers;
@@ -46,6 +49,7 @@ public class DashboardSummaryResponse {
         this.outOfStockCount = outOfStockCount;
         this.totalOwedToSupplier = totalOwedToSupplier;
         this.pendingChequeCount = pendingChequeCount;
+        this.salesTrend = salesTrend;
         this.recentActivity = recentActivity;
     }
 
@@ -97,8 +101,15 @@ public class DashboardSummaryResponse {
         return pendingChequeCount;
     }
 
+    public List<TrendPoint> getSalesTrend() {
+        return salesTrend;
+    }
+
     public List<RecentActivity> getRecentActivity() {
         return recentActivity;
+    }
+
+    public record TrendPoint(LocalDate date, BigDecimal amount) {
     }
 
     public record RecentActivity(

@@ -21,7 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/dashboard")
@@ -94,6 +97,8 @@ public class DashboardApiController {
                 .filter(payment -> PENDING_CHEQUE_STATUSES.contains(payment.getChequeStatus()))
                 .count();
 
+        List<DashboardSummaryResponse.TrendPoint> salesTrend = buildSalesTrend(today);
+
         List<DashboardSummaryResponse.RecentActivity> recentActivity = auditLogRepository
                 .search(null, PageRequest.of(0, 8, Sort.by(Sort.Direction.DESC, "id")))
                 .stream()
@@ -113,8 +118,33 @@ public class DashboardApiController {
                 inventoryService.getOutOfStockProducts().size(),
                 supplierPaymentService.getSupplierBalanceSummary().totalOwed(),
                 pendingChequeCount,
+                salesTrend,
                 recentActivity
         );
+    }
+
+    /** Last 7 days of completed sales, by day - real data, no synthetic/mock points. */
+    private List<DashboardSummaryResponse.TrendPoint> buildSalesTrend(LocalDate today) {
+
+        LocalDate rangeStart = today.minusDays(6);
+
+        Map<LocalDate, BigDecimal> totalsByDate = salesInvoiceRepository.findAllByOrderByInvoiceDateDesc().stream()
+                .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
+                .filter(invoice -> invoice.getInvoiceDate() != null
+                        && !invoice.getInvoiceDate().isBefore(rangeStart)
+                        && !invoice.getInvoiceDate().isAfter(today))
+                .collect(Collectors.groupingBy(
+                        SalesInvoice::getInvoiceDate,
+                        Collectors.reducing(
+                                BigDecimal.ZERO,
+                                invoice -> invoice.getNetAmount() == null ? BigDecimal.ZERO : invoice.getNetAmount(),
+                                BigDecimal::add)));
+
+        List<DashboardSummaryResponse.TrendPoint> trend = new ArrayList<>();
+        for (LocalDate date = rangeStart; !date.isAfter(today); date = date.plusDays(1)) {
+            trend.add(new DashboardSummaryResponse.TrendPoint(date, totalsByDate.getOrDefault(date, BigDecimal.ZERO)));
+        }
+        return trend;
     }
 
     private DashboardSummaryResponse.RecentActivity toRecentActivity(AuditLog log) {
