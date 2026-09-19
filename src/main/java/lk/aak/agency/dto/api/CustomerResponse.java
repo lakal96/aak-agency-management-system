@@ -19,6 +19,7 @@ public class CustomerResponse {
     private final String assignedEmployee;
     private final String status;
     private final String notes;
+    private final String qrCode;
 
     public CustomerResponse(Customer customer) {
         this.id = customer.getId();
@@ -34,6 +35,7 @@ public class CustomerResponse {
         this.assignedEmployee = customer.getAssignedEmployee();
         this.status = customer.getStatus();
         this.notes = customer.getNotes();
+        this.qrCode = customer.getQrCode();
     }
 
     public Long getId() {
@@ -86,5 +88,9 @@ public class CustomerResponse {
 
     public String getNotes() {
         return notes;
+    }
+
+    public String getQrCode() {
+        return qrCode;
     }
 }

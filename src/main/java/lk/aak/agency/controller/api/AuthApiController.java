@@ -3,6 +3,7 @@ package lk.aak.agency.controller.api;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lk.aak.agency.dto.api.AuthResponse;
+import lk.aak.agency.dto.api.ChangePasswordRequest;
 import lk.aak.agency.dto.api.LoginRequest;
 import lk.aak.agency.model.SystemUser;
 import lk.aak.agency.repository.SystemUserRepository;
@@ -18,6 +19,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,6 +38,7 @@ public class AuthApiController {
     private final SystemUserRepository systemUserRepository;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final PasswordEncoder passwordEncoder;
     private final boolean cookieSecure;
 
     public AuthApiController(
@@ -44,6 +47,7 @@ public class AuthApiController {
             SystemUserRepository systemUserRepository,
             JwtService jwtService,
             RefreshTokenService refreshTokenService,
+            PasswordEncoder passwordEncoder,
             @Value("${app.security.cookie-secure}") boolean cookieSecure) {
 
         this.authenticationManager = authenticationManager;
@@ -51,6 +55,7 @@ public class AuthApiController {
         this.systemUserRepository = systemUserRepository;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
+        this.passwordEncoder = passwordEncoder;
         this.cookieSecure = cookieSecure;
     }
 
@@ -116,6 +121,28 @@ public class AuthApiController {
                 .orElseThrow(() -> new BadCredentialsException("User account was not found."));
 
         return new AuthResponse(null, 0, user.getUsername(), user.getFullName(), user.getRole());
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Void> changePassword(
+            @jakarta.validation.Valid @RequestBody ChangePasswordRequest request,
+            org.springframework.security.core.Authentication authentication) {
+
+        SystemUser user = systemUserRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new BadCredentialsException("User account was not found."));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new BadCredentialsException("Current password is incorrect.");
+        }
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("New password and confirmation do not match.");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        systemUserRepository.save(user);
+
+        return ResponseEntity.noContent().build();
     }
 
     private ResponseEntity<AuthResponse> issueTokens(SystemUser user, HttpServletResponse response) {

@@ -6,14 +6,18 @@ import lk.aak.agency.dto.api.PurchaseInvoiceCreateRequest;
 import lk.aak.agency.dto.api.PurchaseInvoiceDetailResponse;
 import lk.aak.agency.dto.api.PurchaseInvoiceItemResponse;
 import lk.aak.agency.dto.api.PurchaseInvoiceResponse;
+import lk.aak.agency.dto.api.SupplierBalanceResponse;
+import lk.aak.agency.dto.api.SupplierPaymentRequest;
 import lk.aak.agency.model.Product;
 import lk.aak.agency.model.PurchaseInvoice;
 import lk.aak.agency.model.PurchaseInvoiceItem;
+import lk.aak.agency.model.SupplierPayment;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.PurchaseInvoiceItemRepository;
 import lk.aak.agency.repository.PurchaseInvoiceRepository;
 import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.service.PurchaseInvoiceService;
+import lk.aak.agency.service.SupplierPaymentService;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -47,19 +51,44 @@ public class PurchaseInvoiceApiController {
     private final ProductRepository productRepository;
     private final PurchaseInvoiceService purchaseInvoiceService;
     private final PurchaseInvoiceFileService purchaseInvoiceFileService;
+    private final SupplierPaymentService supplierPaymentService;
 
     public PurchaseInvoiceApiController(
             PurchaseInvoiceRepository purchaseInvoiceRepository,
             PurchaseInvoiceItemRepository purchaseInvoiceItemRepository,
             ProductRepository productRepository,
             PurchaseInvoiceService purchaseInvoiceService,
-            PurchaseInvoiceFileService purchaseInvoiceFileService) {
+            PurchaseInvoiceFileService purchaseInvoiceFileService,
+            SupplierPaymentService supplierPaymentService) {
 
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
         this.purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
         this.productRepository = productRepository;
         this.purchaseInvoiceService = purchaseInvoiceService;
         this.purchaseInvoiceFileService = purchaseInvoiceFileService;
+        this.supplierPaymentService = supplierPaymentService;
+    }
+
+    @GetMapping("/supplier-balance")
+    public SupplierBalanceResponse supplierBalance() {
+        return new SupplierBalanceResponse(supplierPaymentService.getSupplierBalanceSummary());
+    }
+
+    @PostMapping("/supplier-balance/pay")
+    public ResponseEntity<SupplierBalanceResponse> paySupplierBalance(@Valid @RequestBody SupplierPaymentRequest request) {
+
+        SupplierPayment payment = new SupplierPayment();
+        payment.setPurchaseInvoiceId(request.getPurchaseInvoiceId());
+        payment.setAmount(request.getAmount());
+        payment.setPaymentDate(request.getPaymentDate());
+        payment.setPaymentMethod(request.getPaymentMethod());
+        payment.setReferenceNumber(request.getReferenceNumber());
+        payment.setNotes(request.getNotes());
+
+        supplierPaymentService.recordPayment(payment);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new SupplierBalanceResponse(supplierPaymentService.getSupplierBalanceSummary()));
     }
 
     @GetMapping
