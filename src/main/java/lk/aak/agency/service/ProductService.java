@@ -2,6 +2,8 @@ package lk.aak.agency.service;
 
 import lk.aak.agency.model.Product;
 import lk.aak.agency.repository.ProductRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +30,17 @@ public class ProductService {
                 Sort.by(
                         Sort.Direction.ASC,
                         "productName"
+                )
+        );
+    }
+
+    public Page<Product> search(String keyword, int page, int size) {
+        return productRepository.search(
+                keyword,
+                PageRequest.of(
+                        Math.max(page, 0),
+                        Math.max(size, 1),
+                        Sort.by(Sort.Direction.ASC, "productName")
                 )
         );
     }
