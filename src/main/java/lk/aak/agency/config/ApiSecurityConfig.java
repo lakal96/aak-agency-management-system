@@ -65,14 +65,18 @@ public class ApiSecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
-                        .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/users/**", "/api/v1/audit-log/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/customers/**", "/api/v1/sales-invoices/**")
                         .hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
                         .requestMatchers(
                                 "/api/v1/products/**",
                                 "/api/v1/purchase-invoices/**",
                                 "/api/v1/payments/**",
-                                "/api/v1/inventory/**"
+                                "/api/v1/inventory/**",
+                                "/api/v1/cheques/**",
+                                "/api/v1/collections/**",
+                                "/api/v1/shop-returns/**",
+                                "/api/v1/supplier-returns/**"
                         ).hasAnyRole("ADMIN", "OFFICE")
                         .anyRequest().authenticated()
                 )
