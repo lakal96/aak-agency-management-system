@@ -12,15 +12,23 @@ import lk.aak.agency.model.PurchaseInvoiceItem;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.PurchaseInvoiceItemRepository;
 import lk.aak.agency.repository.PurchaseInvoiceRepository;
+import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.service.PurchaseInvoiceService;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 
 /**
@@ -38,17 +46,20 @@ public class PurchaseInvoiceApiController {
     private final PurchaseInvoiceItemRepository purchaseInvoiceItemRepository;
     private final ProductRepository productRepository;
     private final PurchaseInvoiceService purchaseInvoiceService;
+    private final PurchaseInvoiceFileService purchaseInvoiceFileService;
 
     public PurchaseInvoiceApiController(
             PurchaseInvoiceRepository purchaseInvoiceRepository,
             PurchaseInvoiceItemRepository purchaseInvoiceItemRepository,
             ProductRepository productRepository,
-            PurchaseInvoiceService purchaseInvoiceService) {
+            PurchaseInvoiceService purchaseInvoiceService,
+            PurchaseInvoiceFileService purchaseInvoiceFileService) {
 
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
         this.purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
         this.productRepository = productRepository;
         this.purchaseInvoiceService = purchaseInvoiceService;
+        this.purchaseInvoiceFileService = purchaseInvoiceFileService;
     }
 
     @GetMapping
@@ -97,6 +108,63 @@ public class PurchaseInvoiceApiController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         purchaseInvoiceService.deleteInvoice(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/upload")
+    public PurchaseInvoiceResponse uploadFile(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        PurchaseInvoice invoice = purchaseInvoiceRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Purchase invoice not found."));
+
+        var storedFile = purchaseInvoiceFileService.storeFile(file);
+        String previousStoredFileName = invoice.getInvoiceFileStoredName();
+
+        invoice.setInvoiceFileOriginalName(storedFile.originalFileName());
+        invoice.setInvoiceFileStoredName(storedFile.storedFileName());
+        invoice.setInvoiceFileContentType(storedFile.contentType());
+        invoice.setInvoiceFileSize(storedFile.fileSize());
+        invoice.setInvoiceFileUploadedAt(LocalDateTime.now());
+
+        PurchaseInvoice saved = purchaseInvoiceRepository.save(invoice);
+
+        if (previousStoredFileName != null && !previousStoredFileName.isBlank()) {
+            purchaseInvoiceFileService.deleteFile(previousStoredFileName);
+        }
+
+        return new PurchaseInvoiceResponse(saved);
+    }
+
+    @GetMapping("/{id}/original-file")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
+        PurchaseInvoice invoice = purchaseInvoiceRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Purchase invoice not found."));
+
+        if (!invoice.hasInvoiceFile()) {
+            throw new IllegalArgumentException("No original CBL invoice file is attached.");
+        }
+
+        Resource resource = purchaseInvoiceFileService.loadFile(invoice.getInvoiceFileStoredName());
+
+        MediaType mediaType = invoice.getInvoiceFileContentType() == null
+                ? MediaType.APPLICATION_OCTET_STREAM
+                : MediaType.parseMediaType(invoice.getInvoiceFileContentType());
+
+        ContentDisposition disposition = ContentDisposition.inline()
+                .filename(invoice.getInvoiceFileOriginalName(), StandardCharsets.UTF_8)
+                .build();
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(resource);
+    }
+
+    @PostMapping("/{id}/complete")
+    public PurchaseInvoiceResponse complete(
+            @PathVariable Long id, @RequestParam(defaultValue = "false") boolean verificationConfirmed) {
+
+        purchaseInvoiceService.completeInvoice(id, verificationConfirmed);
+
+        return new PurchaseInvoiceResponse(purchaseInvoiceRepository.findById(id).orElseThrow());
     }
 
     private PurchaseInvoice saveWithItems(PurchaseInvoice invoice, PurchaseInvoiceCreateRequest request) {

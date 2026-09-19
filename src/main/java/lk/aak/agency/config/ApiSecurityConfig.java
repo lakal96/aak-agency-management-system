@@ -83,7 +83,8 @@ public class ApiSecurityConfig {
                                 "/api/v1/salary/**",
                                 "/api/v1/vehicles/**",
                                 "/api/v1/routes/**",
-                                "/api/v1/delivery-trips/**"
+                                "/api/v1/delivery-trips/**",
+                                "/api/v1/reports/**"
                         ).hasAnyRole("ADMIN", "OFFICE")
                         .anyRequest().authenticated()
                 )

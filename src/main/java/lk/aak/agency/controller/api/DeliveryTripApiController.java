@@ -45,6 +45,21 @@ public class DeliveryTripApiController {
         return deliveryTripService.getUnassignedCompletedInvoices().stream().map(SalesInvoiceResponse::new).toList();
     }
 
+    @GetMapping("/vehicle-stock")
+    public List<DeliveryTripService.VehicleStockRow> vehicleStock() {
+        return deliveryTripService.getVehicleStockSummary();
+    }
+
+    @GetMapping("/{id}/loading-summary")
+    public List<DeliveryTripService.LoadingSummaryRow> loadingSummary(@PathVariable Long id) {
+        return deliveryTripService.getLoadingSummary(id);
+    }
+
+    @PostMapping("/{id}/confirm-loading")
+    public void confirmLoading(@PathVariable Long id, @RequestBody(required = false) java.util.Map<Long, java.math.BigDecimal> loadedQuantityByProductId) {
+        deliveryTripService.confirmLoading(id, loadedQuantityByProductId);
+    }
+
     @PostMapping
     public ResponseEntity<DeliveryTripResponse> create(@Valid @RequestBody DeliveryTripRequest request) {
         DeliveryTrip trip = new DeliveryTrip();

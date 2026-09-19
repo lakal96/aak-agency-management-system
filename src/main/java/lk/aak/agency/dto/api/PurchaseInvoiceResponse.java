@@ -23,6 +23,9 @@ public class PurchaseInvoiceResponse {
     private final String paymentMethod;
     private final String status;
     private final String notes;
+    private final boolean hasInvoiceFile;
+    private final String invoiceFileOriginalName;
+    private final boolean invoiceVerified;
 
     public PurchaseInvoiceResponse(PurchaseInvoice invoice) {
         this.id = invoice.getId();
@@ -41,6 +44,9 @@ public class PurchaseInvoiceResponse {
         this.paymentMethod = invoice.getPaymentMethod();
         this.status = invoice.getStatus();
         this.notes = invoice.getNotes();
+        this.hasInvoiceFile = invoice.hasInvoiceFile();
+        this.invoiceFileOriginalName = invoice.getInvoiceFileOriginalName();
+        this.invoiceVerified = invoice.isInvoiceVerified();
     }
 
     public Long getId() {
@@ -97,6 +103,18 @@ public class PurchaseInvoiceResponse {
 
     public String getPaymentMethod() {
         return paymentMethod;
+    }
+
+    public boolean isHasInvoiceFile() {
+        return hasInvoiceFile;
+    }
+
+    public String getInvoiceFileOriginalName() {
+        return invoiceFileOriginalName;
+    }
+
+    public boolean isInvoiceVerified() {
+        return invoiceVerified;
     }
 
     public String getStatus() {
