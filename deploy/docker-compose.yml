@@ -40,11 +40,20 @@ services:
     expose:
       - "8080"
 
+  frontend:
+    image: ${FRONTEND_IMAGE:-992382529780.dkr.ecr.ap-southeast-1.amazonaws.com/aak-dev-frontend}:${FRONTEND_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    networks:
+      - internal
+    expose:
+      - "80"
+
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
       - app
+      - frontend
     ports:
       - "80:80"
       - "443:443"

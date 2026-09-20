@@ -87,6 +87,7 @@ jobs:
             cat > /opt/aak-agency/.env <<'ENV'
           APP_IMAGE=REPLACE_WITH_ECR_IMAGE
           APP_IMAGE_TAG=latest
+          FRONTEND_IMAGE_TAG=latest
           MYSQL_ROOT_PASSWORD=dev-root-change-me
           MYSQL_DATABASE=aak_agency_db
           MYSQL_USER=aak_app
