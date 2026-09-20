@@ -51,10 +51,15 @@ public class EmployeeApiController {
     private void applyRequest(Employee employee, EmployeeRequest request) {
         employee.setFullName(request.getFullName());
         employee.setDesignation(request.getDesignation());
+        employee.setBaseSalary(request.getBaseSalary());
         employee.setPhone(request.getPhone());
         employee.setAddress(request.getAddress());
         employee.setNicNumber(request.getNicNumber());
-        employee.setJoinDate(request.getJoinDate());
+        // Only overwrite the join date if the request actually supplies one - the frontend's
+        // edit form doesn't collect it, so omitting this guard silently wiped it on every edit.
+        if (request.getJoinDate() != null) {
+            employee.setJoinDate(request.getJoinDate());
+        }
         employee.setStatus(request.getStatus());
         employee.setSystemUsername(request.getSystemUsername());
         employee.setBiometricDeviceUserId(request.getBiometricDeviceUserId());

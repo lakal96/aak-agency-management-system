@@ -2,6 +2,7 @@ package lk.aak.agency.dto.api;
 
 import lk.aak.agency.model.Employee;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public class EmployeeResponse {
@@ -10,6 +11,7 @@ public class EmployeeResponse {
     private final String employeeCode;
     private final String fullName;
     private final String designation;
+    private final BigDecimal baseSalary;
     private final String phone;
     private final String address;
     private final String nicNumber;
@@ -24,6 +26,7 @@ public class EmployeeResponse {
         this.employeeCode = employee.getEmployeeCode();
         this.fullName = employee.getFullName();
         this.designation = employee.getDesignation();
+        this.baseSalary = employee.getBaseSalary();
         this.phone = employee.getPhone();
         this.address = employee.getAddress();
         this.nicNumber = employee.getNicNumber();
@@ -48,6 +51,10 @@ public class EmployeeResponse {
 
     public String getDesignation() {
         return designation;
+    }
+
+    public BigDecimal getBaseSalary() {
+        return baseSalary;
     }
 
     public String getPhone() {

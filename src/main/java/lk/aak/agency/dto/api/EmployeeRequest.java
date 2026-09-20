@@ -1,9 +1,11 @@
 package lk.aak.agency.dto.api;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public class EmployeeRequest {
@@ -14,6 +16,9 @@ public class EmployeeRequest {
 
     @NotBlank(message = "Designation is required.")
     private String designation;
+
+    @DecimalMin(value = "0", message = "Base salary cannot be negative.")
+    private BigDecimal baseSalary;
 
     @Pattern(regexp = "^$|^[0-9+()\\-\\s]{7,20}$", message = "Enter a valid phone number.")
     private String phone;
@@ -40,6 +45,14 @@ public class EmployeeRequest {
 
     public void setDesignation(String designation) {
         this.designation = designation;
+    }
+
+    public BigDecimal getBaseSalary() {
+        return baseSalary;
+    }
+
+    public void setBaseSalary(BigDecimal baseSalary) {
+        this.baseSalary = baseSalary;
     }
 
     public String getPhone() {

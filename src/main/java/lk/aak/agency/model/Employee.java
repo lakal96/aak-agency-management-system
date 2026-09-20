@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
@@ -26,6 +27,9 @@ public class Employee {
     @NotBlank(message = "Designation is required.")
     @Column(name = "designation", nullable = false)
     private String designation;
+
+    @Column(name = "base_salary", precision = 12, scale = 2)
+    private BigDecimal baseSalary;
 
     @Pattern(regexp = "^$|^[0-9+()\\-\\s]{7,20}$", message = "Enter a valid phone number.")
     private String phone;
@@ -96,6 +100,14 @@ public class Employee {
 
     public void setDesignation(String designation) {
         this.designation = designation;
+    }
+
+    public BigDecimal getBaseSalary() {
+        return baseSalary;
+    }
+
+    public void setBaseSalary(BigDecimal baseSalary) {
+        this.baseSalary = baseSalary;
     }
 
     public String getPhone() {
