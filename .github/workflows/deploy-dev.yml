@@ -109,6 +109,9 @@ jobs:
           aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
           docker compose -f /opt/aak-agency/docker-compose.yml pull app
           docker compose -f /opt/aak-agency/docker-compose.yml up -d --remove-orphans
+          # nginx's config is a bind-mounted file, not part of the image - compose won't detect
+          # content changes there, so force-recreate it on every deploy to pick up routing changes.
+          docker compose -f /opt/aak-agency/docker-compose.yml up -d --force-recreate nginx
           EOF
           )
           parameters=$(jq -nc --arg commands "$commands" '{commands: [$commands]}')
