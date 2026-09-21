@@ -66,24 +66,24 @@ public class EmployeeSalaryService {
         List<EmployeeAdvance> unsettledAdvances =
                 employeeAdvanceRepository.findByEmployeeIdAndSettledFalseOrderByAdvanceDateAsc(employeeId);
 
+        // Settle the selected advances oldest-first, but never let the deduction exceed the gross
+        // salary being paid this run - any advances that don't fit are simply left unsettled so they
+        // carry over and get deducted from a future salary payment instead of blocking this one.
         BigDecimal advanceDeduction = BigDecimal.ZERO;
         List<EmployeeAdvance> advancesToSettle = new java.util.ArrayList<>();
 
         if (advanceIdsToSettle != null) {
             for (EmployeeAdvance advance : unsettledAdvances) {
-                if (advanceIdsToSettle.contains(advance.getId())) {
-                    advancesToSettle.add(advance);
-                    advanceDeduction = advanceDeduction.add(advance.getAmount());
+                if (!advanceIdsToSettle.contains(advance.getId())) {
+                    continue;
                 }
+                BigDecimal candidateTotal = advanceDeduction.add(advance.getAmount());
+                if (candidateTotal.compareTo(grossSalary) > 0) {
+                    continue;
+                }
+                advancesToSettle.add(advance);
+                advanceDeduction = candidateTotal;
             }
-        }
-
-        if (advanceDeduction.compareTo(grossSalary) > 0) {
-            throw new IllegalArgumentException(
-                    "Selected advances (Rs. " + advanceDeduction.stripTrailingZeros().toPlainString()
-                            + ") cannot be greater than the gross salary (Rs. "
-                            + grossSalary.stripTrailingZeros().toPlainString() + ")."
-            );
         }
 
         EmployeeSalaryPayment payment = new EmployeeSalaryPayment();
