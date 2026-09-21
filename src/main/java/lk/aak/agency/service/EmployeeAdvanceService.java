@@ -62,4 +62,39 @@ public class EmployeeAdvanceService {
 
         return employeeAdvanceRepository.save(advance);
     }
+
+    @Transactional
+    public EmployeeAdvance updateAdvance(Long id, BigDecimal amount, LocalDate advanceDate, String notes) {
+
+        EmployeeAdvance advance = employeeAdvanceRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Advance not found."));
+
+        if (advance.isSettled()) {
+            throw new IllegalArgumentException("This advance has already been settled in a salary payment and cannot be edited.");
+        }
+
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Advance amount must be greater than zero.");
+        }
+
+        advance.setAmount(amount);
+        advance.setAdvanceDate(advanceDate != null ? advanceDate : advance.getAdvanceDate());
+        advance.setNotes(notes);
+
+        return employeeAdvanceRepository.save(advance);
+    }
+
+    @Transactional
+    public void deleteAdvance(Long id) {
+
+        EmployeeAdvance advance = employeeAdvanceRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Advance not found."));
+
+        if (advance.isSettled()) {
+            throw new IllegalArgumentException("This advance has already been settled in a salary payment and cannot be deleted.");
+        }
+
+        employeeAdvanceRepository.deleteById(id);
+    }
 }
+

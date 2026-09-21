@@ -7,6 +7,7 @@ import lk.aak.agency.model.Employee;
 import lk.aak.agency.service.EmployeeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.NoSuchElementException;
@@ -46,6 +47,16 @@ public class EmployeeApiController {
                 .orElseThrow(() -> new NoSuchElementException("Employee not found."));
         applyRequest(employee, request);
         return new EmployeeResponse(employeeService.saveEmployee(employee));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        if (employeeService.getEmployeeById(id).isEmpty()) {
+            throw new NoSuchElementException("Employee not found.");
+        }
+        employeeService.deleteEmployee(id);
+        return ResponseEntity.noContent().build();
     }
 
     private void applyRequest(Employee employee, EmployeeRequest request) {

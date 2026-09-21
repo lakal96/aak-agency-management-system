@@ -1,7 +1,10 @@
 package lk.aak.agency.service;
 
 import lk.aak.agency.model.Employee;
+import lk.aak.agency.repository.EmployeeAdvanceRepository;
+import lk.aak.agency.repository.EmployeeAttendanceRepository;
 import lk.aak.agency.repository.EmployeeRepository;
+import lk.aak.agency.repository.EmployeeSalaryPaymentRepository;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
@@ -13,9 +16,23 @@ import java.util.Optional;
 public class EmployeeService {
 
     private final EmployeeRepository employeeRepository;
+    private final EmployeeAdvanceRepository employeeAdvanceRepository;
+    private final EmployeeSalaryPaymentRepository employeeSalaryPaymentRepository;
+    private final EmployeeAttendanceRepository employeeAttendanceRepository;
+    private final AuditLogService auditLogService;
 
-    public EmployeeService(EmployeeRepository employeeRepository) {
+    public EmployeeService(
+            EmployeeRepository employeeRepository,
+            EmployeeAdvanceRepository employeeAdvanceRepository,
+            EmployeeSalaryPaymentRepository employeeSalaryPaymentRepository,
+            EmployeeAttendanceRepository employeeAttendanceRepository,
+            AuditLogService auditLogService) {
+
         this.employeeRepository = employeeRepository;
+        this.employeeAdvanceRepository = employeeAdvanceRepository;
+        this.employeeSalaryPaymentRepository = employeeSalaryPaymentRepository;
+        this.employeeAttendanceRepository = employeeAttendanceRepository;
+        this.auditLogService = auditLogService;
     }
 
     public List<Employee> getAllEmployees() {
@@ -59,5 +76,30 @@ public class EmployeeService {
                 .orElse(1L);
 
         return String.format("EMP-%04d", nextNumber);
+    }
+
+    public void deleteEmployee(Long id) {
+
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Employee not found."));
+
+        boolean hasHistory =
+                !employeeAdvanceRepository.findByEmployeeIdOrderByAdvanceDateDesc(id).isEmpty()
+                        || !employeeSalaryPaymentRepository.findByEmployeeIdOrderByPaymentDateDesc(id).isEmpty()
+                        || !employeeAttendanceRepository.findByEmployeeIdOrderByAttendanceDateDesc(id).isEmpty();
+
+        if (hasHistory) {
+            throw new IllegalArgumentException(
+                    "This employee has advances, salary payments or attendance history and cannot be deleted. "
+                            + "Set their status to INACTIVE instead."
+            );
+        }
+
+        employeeRepository.deleteById(id);
+
+        auditLogService.record(
+                "EMPLOYEE_DELETED", "Employee", id,
+                "Deleted employee \"" + employee.getFullName() + "\""
+        );
     }
 }
