@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @Service
@@ -63,18 +65,30 @@ public class EmployeeSalaryService {
             throw new IllegalArgumentException("Please select the pay period month.");
         }
 
+        LocalDate payPeriodCutoff;
+        try {
+            payPeriodCutoff = YearMonth.parse(payPeriodMonth).atEndOfMonth();
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException("Pay period month must be in YYYY-MM format.");
+        }
+
         List<EmployeeAdvance> unsettledAdvances =
                 employeeAdvanceRepository.findByEmployeeIdAndSettledFalseOrderByAdvanceDateAsc(employeeId);
 
-        // Settle the selected advances oldest-first, but never let the deduction exceed the gross
-        // salary being paid this run - any advances that don't fit are simply left unsettled so they
-        // carry over and get deducted from a future salary payment instead of blocking this one.
+        // An advance only counts against a pay period if it was taken in that month or earlier -
+        // one taken after this period's month must wait for its own (or a later unpaid) period.
+        // Among the eligible advances, settle oldest-first, but never let the deduction exceed the
+        // gross salary being paid this run - anything that doesn't fit stays unsettled and carries
+        // over to a future salary payment instead of blocking this one.
         BigDecimal advanceDeduction = BigDecimal.ZERO;
         List<EmployeeAdvance> advancesToSettle = new java.util.ArrayList<>();
 
         if (advanceIdsToSettle != null) {
             for (EmployeeAdvance advance : unsettledAdvances) {
                 if (!advanceIdsToSettle.contains(advance.getId())) {
+                    continue;
+                }
+                if (advance.getAdvanceDate().isAfter(payPeriodCutoff)) {
                     continue;
                 }
                 BigDecimal candidateTotal = advanceDeduction.add(advance.getAmount());
