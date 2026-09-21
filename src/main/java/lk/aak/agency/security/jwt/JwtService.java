@@ -20,12 +20,27 @@ public class JwtService {
 
     private static final String ROLE_CLAIM = "role";
 
+    // Must match application.properties' app.jwt.secret default exactly - if this literal value
+    // is still in use while the app is deployed behind HTTPS (cookie-secure=true), someone forgot
+    // to set JWT_SECRET, and every access token is forgeable by anyone who reads this source file.
+    private static final String INSECURE_DEFAULT_SECRET =
+            "dev-only-secret-do-not-use-in-production-please-change-me-32bytes";
+
     private final SecretKey signingKey;
     private final long accessTokenMinutes;
 
     public JwtService(
             @Value("${app.jwt.secret}") String secret,
-            @Value("${app.jwt.access-token-minutes}") long accessTokenMinutes) {
+            @Value("${app.jwt.access-token-minutes}") long accessTokenMinutes,
+            @Value("${app.security.cookie-secure}") boolean cookieSecure) {
+
+        if (cookieSecure && INSECURE_DEFAULT_SECRET.equals(secret)) {
+            throw new IllegalStateException(
+                    "Refusing to start: app.security.cookie-secure=true (this looks like a real "
+                            + "deployment) but JWT_SECRET is still the insecure dev-only default. "
+                            + "Set a real, random, >=32 byte JWT_SECRET environment variable."
+            );
+        }
 
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenMinutes = accessTokenMinutes;
