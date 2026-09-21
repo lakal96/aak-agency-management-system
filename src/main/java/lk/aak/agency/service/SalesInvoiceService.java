@@ -60,10 +60,11 @@ public class SalesInvoiceService {
     }
 
     public Page<SalesInvoice> getInvoicePage(
-            String search, int page, int size) {
+            String search, int page, int size, Long scopedEmployeeId) {
 
         return salesInvoiceRepository.search(
                 search == null ? "" : search.trim(),
+                scopedEmployeeId,
                 PageRequest.of(
                         Math.max(page, 0),
                         Math.max(size, 1),

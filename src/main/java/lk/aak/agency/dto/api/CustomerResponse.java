@@ -17,6 +17,7 @@ public class CustomerResponse {
     private final BigDecimal creditLimit;
     private final Integer paymentTermsDays;
     private final String assignedEmployee;
+    private final Long assignedEmployeeId;
     private final String status;
     private final String notes;
     private final String qrCode;
@@ -33,6 +34,7 @@ public class CustomerResponse {
         this.creditLimit = customer.getCreditLimit();
         this.paymentTermsDays = customer.getPaymentTermsDays();
         this.assignedEmployee = customer.getAssignedEmployee();
+        this.assignedEmployeeId = customer.getAssignedEmployeeId();
         this.status = customer.getStatus();
         this.notes = customer.getNotes();
         this.qrCode = customer.getQrCode();
@@ -80,6 +82,10 @@ public class CustomerResponse {
 
     public String getAssignedEmployee() {
         return assignedEmployee;
+    }
+
+    public Long getAssignedEmployeeId() {
+        return assignedEmployeeId;
     }
 
     public String getStatus() {

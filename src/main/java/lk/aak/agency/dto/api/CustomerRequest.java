@@ -34,6 +34,8 @@ public class CustomerRequest {
 
     private String assignedEmployee;
 
+    private Long assignedEmployeeId;
+
     private String status;
 
     private String notes;
@@ -108,6 +110,14 @@ public class CustomerRequest {
 
     public void setAssignedEmployee(String assignedEmployee) {
         this.assignedEmployee = assignedEmployee;
+    }
+
+    public Long getAssignedEmployeeId() {
+        return assignedEmployeeId;
+    }
+
+    public void setAssignedEmployeeId(Long assignedEmployeeId) {
+        this.assignedEmployeeId = assignedEmployeeId;
     }
 
     public String getStatus() {

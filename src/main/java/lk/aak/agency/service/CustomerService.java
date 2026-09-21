@@ -38,8 +38,10 @@ public class CustomerService {
         );
     }
 
-    public Page<Customer> getCustomers(int page, int size) {
-        return customerRepository.findAll(
+    public Page<Customer> getCustomers(int page, int size, Long scopedEmployeeId) {
+        return customerRepository.search(
+                "",
+                scopedEmployeeId,
                 PageRequest.of(
                         Math.max(page, 0),
                         Math.max(size, 1),
@@ -48,9 +50,10 @@ public class CustomerService {
         );
     }
 
-    public Page<Customer> search(String keyword, int page, int size) {
+    public Page<Customer> search(String keyword, int page, int size, Long scopedEmployeeId) {
         return customerRepository.search(
                 keyword,
+                scopedEmployeeId,
                 PageRequest.of(
                         Math.max(page, 0),
                         Math.max(size, 1),

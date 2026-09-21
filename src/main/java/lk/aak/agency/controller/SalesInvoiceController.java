@@ -7,6 +7,7 @@ import lk.aak.agency.model.SalesInvoiceItem;
 import lk.aak.agency.repository.CustomerRepository;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.service.SalesInvoiceService;
+import lk.aak.agency.service.SalesRepScopeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -36,11 +37,13 @@ public class SalesInvoiceController {
     private final SalesInvoiceService salesInvoiceService;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
+    private final SalesRepScopeService salesRepScopeService;
 
     public SalesInvoiceController(
             SalesInvoiceService salesInvoiceService,
             CustomerRepository customerRepository,
-            ProductRepository productRepository) {
+            ProductRepository productRepository,
+            SalesRepScopeService salesRepScopeService) {
 
         this.salesInvoiceService =
                 salesInvoiceService;
@@ -50,17 +53,20 @@ public class SalesInvoiceController {
 
         this.productRepository =
                 productRepository;
+
+        this.salesRepScopeService = salesRepScopeService;
     }
 
     @GetMapping
     public String showInvoiceList(
             @RequestParam(defaultValue = "") String search,
             @RequestParam(defaultValue = "0") int page,
-            Model model) {
+            Model model,
+            Authentication authentication) {
 
         Page<SalesInvoice> invoicePage =
                 salesInvoiceService.getInvoicePage(
-                        search, page, PAGE_SIZE
+                        search, page, PAGE_SIZE, salesRepScopeService.resolveScopedEmployeeId(authentication)
                 );
 
         model.addAttribute(

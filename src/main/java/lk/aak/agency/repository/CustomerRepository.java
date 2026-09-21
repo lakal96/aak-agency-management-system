@@ -24,15 +24,22 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     /*
      * Paginated list, optionally filtered by name, code, area, contact person or phone -
      * backs the REST API's list endpoint (the Thymeleaf list page isn't searchable yet).
+     * employeeId scopes results to one assigned employee (SALES_REP visibility) - pass null
+     * to see everyone (ADMIN/OFFICE).
      */
     @Query("""
             SELECT c FROM Customer c
-            WHERE :keyword IS NULL OR :keyword = ''
+            WHERE (:keyword IS NULL OR :keyword = ''
                 OR LOWER(c.customerName) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(c.customerCode) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(c.area) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(c.contactPerson) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                OR LOWER(c.phone) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(c.phone) LIKE LOWER(CONCAT('%', :keyword, '%')))
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
             """)
-    Page<Customer> search(@Param("keyword") String keyword, Pageable pageable);
+    Page<Customer> search(
+            @Param("keyword") String keyword,
+            @Param("employeeId") Long employeeId,
+            Pageable pageable
+    );
 }

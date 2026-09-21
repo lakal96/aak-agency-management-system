@@ -17,12 +17,14 @@ import lk.aak.agency.repository.SalesInvoiceItemRepository;
 import lk.aak.agency.repository.SalesInvoiceRepository;
 import lk.aak.agency.service.PaymentService;
 import lk.aak.agency.service.SalesInvoiceService;
+import lk.aak.agency.service.SalesRepScopeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -46,6 +48,7 @@ public class SalesInvoiceApiController {
     private final ProductRepository productRepository;
     private final SalesInvoiceService salesInvoiceService;
     private final PaymentService paymentService;
+    private final SalesRepScopeService salesRepScopeService;
 
     public SalesInvoiceApiController(
             SalesInvoiceRepository salesInvoiceRepository,
@@ -53,7 +56,8 @@ public class SalesInvoiceApiController {
             CustomerRepository customerRepository,
             ProductRepository productRepository,
             SalesInvoiceService salesInvoiceService,
-            PaymentService paymentService) {
+            PaymentService paymentService,
+            SalesRepScopeService salesRepScopeService) {
 
         this.salesInvoiceRepository = salesInvoiceRepository;
         this.salesInvoiceItemRepository = salesInvoiceItemRepository;
@@ -61,16 +65,19 @@ public class SalesInvoiceApiController {
         this.productRepository = productRepository;
         this.salesInvoiceService = salesInvoiceService;
         this.paymentService = paymentService;
+        this.salesRepScopeService = salesRepScopeService;
     }
 
     @GetMapping
     public PageResponse<SalesInvoiceResponse> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int size,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            Authentication authentication) {
 
         Page<SalesInvoice> invoices = salesInvoiceRepository.search(
                 q == null ? "" : q,
+                salesRepScopeService.resolveScopedEmployeeId(authentication),
                 PageRequest.of(Math.max(page, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "invoiceDate"))
         );
 
@@ -78,10 +85,17 @@ public class SalesInvoiceApiController {
     }
 
     @GetMapping("/{id}")
-    public SalesInvoiceDetailResponse getById(@PathVariable Long id) {
+    public SalesInvoiceDetailResponse getById(@PathVariable Long id, Authentication authentication) {
 
         SalesInvoice invoice = salesInvoiceRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Sales invoice not found."));
+
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        Customer invoiceCustomer = invoice.getCustomer();
+        if (scopedEmployeeId != null
+                && (invoiceCustomer == null || !scopedEmployeeId.equals(invoiceCustomer.getAssignedEmployeeId()))) {
+            throw new NoSuchElementException("Sales invoice not found.");
+        }
 
         var items = salesInvoiceItemRepository.findBySalesInvoiceIdOrderByIdAsc(id).stream()
                 .map(SalesInvoiceItemResponse::new)

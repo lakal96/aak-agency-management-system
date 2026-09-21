@@ -57,7 +57,7 @@ class SalesInvoiceRepositoryTest {
         saveInvoice("INV-002", customer);
 
         Page<SalesInvoice> result = salesInvoiceRepository.search(
-                "", PageRequest.of(0, 1, Sort.by(Sort.Direction.ASC, "invoiceNumber"))
+                "", null, PageRequest.of(0, 1, Sort.by(Sort.Direction.ASC, "invoiceNumber"))
         );
 
         assertThat(result.getTotalElements()).isEqualTo(2);
@@ -72,7 +72,7 @@ class SalesInvoiceRepositoryTest {
         saveInvoice("INV-200", customer);
 
         Page<SalesInvoice> result = salesInvoiceRepository.search(
-                "inv-100", PageRequest.of(0, 10)
+                "inv-100", null, PageRequest.of(0, 10)
         );
 
         assertThat(result.getContent())
@@ -89,10 +89,10 @@ class SalesInvoiceRepositoryTest {
         saveInvoice("INV-302", matara);
 
         Page<SalesInvoice> byName = salesInvoiceRepository.search(
-                "galle", PageRequest.of(0, 10)
+                "galle", null, PageRequest.of(0, 10)
         );
         Page<SalesInvoice> byArea = salesInvoiceRepository.search(
-                "MATARA", PageRequest.of(0, 10)
+                "MATARA", null, PageRequest.of(0, 10)
         );
 
         assertThat(byName.getContent())
@@ -110,10 +110,28 @@ class SalesInvoiceRepositoryTest {
         saveInvoice("INV-500", customer);
 
         Page<SalesInvoice> result = salesInvoiceRepository.search(
-                "nonexistent-term", PageRequest.of(0, 10)
+                "nonexistent-term", null, PageRequest.of(0, 10)
         );
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isZero();
+    }
+
+    @Test
+    void search_withEmployeeId_onlyReturnsInvoicesForThatEmployeesCustomers() {
+
+        Customer assigned = saveCustomer("Assigned Shop", "Colombo");
+        assigned.setAssignedEmployeeId(42L);
+        customerRepository.save(assigned);
+
+        Customer unassigned = saveCustomer("Other Shop", "Colombo");
+        saveInvoice("INV-700", assigned);
+        saveInvoice("INV-701", unassigned);
+
+        Page<SalesInvoice> scoped = salesInvoiceRepository.search("", 42L, PageRequest.of(0, 10));
+
+        assertThat(scoped.getContent())
+                .extracting(SalesInvoice::getInvoiceNumber)
+                .containsExactly("INV-700");
     }
 }

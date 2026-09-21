@@ -55,6 +55,12 @@ public class Customer {
     @Column(name = "assigned_employee")
     private String assignedEmployee;
 
+    // FK to employees.id - the source of truth for SALES_REP visibility scoping (see
+    // SalesRepScopeService). The legacy assignedEmployee free-text field above is kept only
+    // for old data and is no longer written to by the UI.
+    @Column(name = "assigned_employee_id")
+    private Long assignedEmployeeId;
+
     private String status;
 
     @Column(name = "qr_code")
@@ -175,6 +181,14 @@ public class Customer {
 
     public void setAssignedEmployee(String assignedEmployee) {
         this.assignedEmployee = assignedEmployee;
+    }
+
+    public Long getAssignedEmployeeId() {
+        return assignedEmployeeId;
+    }
+
+    public void setAssignedEmployeeId(Long assignedEmployeeId) {
+        this.assignedEmployeeId = assignedEmployeeId;
     }
 
     public String getStatus() {

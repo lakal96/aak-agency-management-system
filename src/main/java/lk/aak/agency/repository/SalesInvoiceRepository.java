@@ -29,20 +29,24 @@ public interface SalesInvoiceRepository
     /*
      * Paginated list, optionally filtered by invoice number, customer name/area,
      * route code, sale type or status - keeps the list screen usable at scale.
+     * employeeId scopes results to one assigned employee's customers (SALES_REP
+     * visibility) - pass null to see everyone (ADMIN/OFFICE).
      */
     @Query("""
             SELECT i FROM SalesInvoice i
             LEFT JOIN i.customer c
-            WHERE :keyword IS NULL OR :keyword = ''
+            WHERE (:keyword IS NULL OR :keyword = ''
                 OR LOWER(i.invoiceNumber) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(c.customerName) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(c.area) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(i.routeCode) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(i.saleType) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                OR LOWER(i.status) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(i.status) LIKE LOWER(CONCAT('%', :keyword, '%')))
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
             """)
     Page<SalesInvoice> search(
             @Param("keyword") String keyword,
+            @Param("employeeId") Long employeeId,
             Pageable pageable
     );
 

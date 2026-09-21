@@ -39,6 +39,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import org.springframework.security.core.Authentication;
+import lk.aak.agency.service.SalesRepScopeService;
+
 @RestController
 @RequestMapping("/api/v1/customers")
 public class CustomerApiController {
@@ -57,6 +60,7 @@ public class CustomerApiController {
     private final PaymentRepository paymentRepository;
     private final PaymentService paymentService;
     private final ExcelService excelService;
+    private final SalesRepScopeService salesRepScopeService;
 
     public CustomerApiController(
             CustomerService customerService,
@@ -64,7 +68,8 @@ public class CustomerApiController {
             SalesInvoiceRepository salesInvoiceRepository,
             PaymentRepository paymentRepository,
             PaymentService paymentService,
-            ExcelService excelService) {
+            ExcelService excelService,
+            SalesRepScopeService salesRepScopeService) {
 
         this.customerService = customerService;
         this.qrCodeService = qrCodeService;
@@ -72,26 +77,39 @@ public class CustomerApiController {
         this.paymentRepository = paymentRepository;
         this.paymentService = paymentService;
         this.excelService = excelService;
+        this.salesRepScopeService = salesRepScopeService;
+    }
+
+    /** Hides a customer outside a SALES_REP's assigned scope by reporting it as not found. */
+    private void assertVisible(Customer customer, Authentication authentication) {
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+            throw new NoSuchElementException("Customer not found.");
+        }
     }
 
     @GetMapping
     public PageResponse<CustomerResponse> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int size,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            Authentication authentication) {
+
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
 
         Page<Customer> customers = (q == null || q.isBlank())
-                ? customerService.getCustomers(page, size)
-                : customerService.search(q, page, size);
+                ? customerService.getCustomers(page, size, scopedEmployeeId)
+                : customerService.search(q, page, size, scopedEmployeeId);
 
         return PageResponse.from(customers, CustomerResponse::new);
     }
 
     @GetMapping("/{id}")
-    public CustomerResponse getById(@PathVariable Long id) {
-        return customerService.getCustomerById(id)
-                .map(CustomerResponse::new)
+    public CustomerResponse getById(@PathVariable Long id, Authentication authentication) {
+        Customer customer = customerService.getCustomerById(id)
                 .orElseThrow(() -> new NoSuchElementException("Customer not found."));
+        assertVisible(customer, authentication);
+        return new CustomerResponse(customer);
     }
 
     /** The shop's printable QR code (PNG) - scanning it opens this shop's credit history. */
@@ -292,6 +310,7 @@ public class CustomerApiController {
         customer.setCreditLimit(request.getCreditLimit());
         customer.setPaymentTermsDays(request.getPaymentTermsDays());
         customer.setAssignedEmployee(request.getAssignedEmployee());
+        customer.setAssignedEmployeeId(request.getAssignedEmployeeId());
         customer.setStatus(request.getStatus());
         customer.setNotes(request.getNotes());
     }

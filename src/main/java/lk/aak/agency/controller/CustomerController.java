@@ -3,11 +3,13 @@ package lk.aak.agency.controller;
 import lk.aak.agency.model.Customer;
 import lk.aak.agency.service.CustomerService;
 import lk.aak.agency.service.QrCodeService;
+import lk.aak.agency.service.SalesRepScopeService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -27,18 +29,25 @@ public class CustomerController {
 
     private final CustomerService customerService;
     private final QrCodeService qrCodeService;
+    private final SalesRepScopeService salesRepScopeService;
 
-    public CustomerController(CustomerService customerService, QrCodeService qrCodeService) {
+    public CustomerController(
+            CustomerService customerService,
+            QrCodeService qrCodeService,
+            SalesRepScopeService salesRepScopeService) {
         this.customerService = customerService;
         this.qrCodeService = qrCodeService;
+        this.salesRepScopeService = salesRepScopeService;
     }
 
     @GetMapping
     public String showCustomerList(
             @RequestParam(defaultValue = "0") int page,
-            Model model) {
+            Model model,
+            Authentication authentication) {
 
-        Page<Customer> customerPage = customerService.getCustomers(page, PAGE_SIZE);
+        Page<Customer> customerPage = customerService.getCustomers(
+                page, PAGE_SIZE, salesRepScopeService.resolveScopedEmployeeId(authentication));
 
         model.addAttribute("customers", customerPage.getContent());
         model.addAttribute("currentPage", customerPage.getNumber());
