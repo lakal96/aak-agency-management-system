@@ -2,6 +2,8 @@ package lk.aak.agency.service;
 
 import lk.aak.agency.model.Customer;
 import lk.aak.agency.repository.CustomerRepository;
+import lk.aak.agency.repository.SalesInvoiceRepository;
+import lk.aak.agency.repository.ShopReturnRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -16,10 +18,18 @@ public class CustomerService {
 
     private final CustomerRepository customerRepository;
     private final AuditLogService auditLogService;
+    private final SalesInvoiceRepository salesInvoiceRepository;
+    private final ShopReturnRepository shopReturnRepository;
 
-    public CustomerService(CustomerRepository customerRepository, AuditLogService auditLogService) {
+    public CustomerService(
+            CustomerRepository customerRepository,
+            AuditLogService auditLogService,
+            SalesInvoiceRepository salesInvoiceRepository,
+            ShopReturnRepository shopReturnRepository) {
         this.customerRepository = customerRepository;
         this.auditLogService = auditLogService;
+        this.salesInvoiceRepository = salesInvoiceRepository;
+        this.shopReturnRepository = shopReturnRepository;
     }
 
     public List<Customer> getAllCustomers() {
@@ -78,6 +88,13 @@ public class CustomerService {
     public void deleteCustomer(Long id) {
 
         Customer customer = customerRepository.findById(id).orElse(null);
+
+        if (salesInvoiceRepository.existsByCustomerId(id) || shopReturnRepository.existsByCustomerId(id)) {
+            throw new IllegalArgumentException(
+                    "This customer has sales invoices or returns and cannot be deleted. "
+                            + "Set its status to INACTIVE instead."
+            );
+        }
 
         customerRepository.deleteById(id);
 

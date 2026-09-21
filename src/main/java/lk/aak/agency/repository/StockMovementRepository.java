@@ -14,6 +14,8 @@ public interface StockMovementRepository
     List<StockMovement>
     findByProductIdOrderByMovementDateDesc(Long productId);
 
+    boolean existsByProductId(Long productId);
+
     boolean existsByReferenceTypeAndReferenceItemId(
             String referenceType,
             Long referenceItemId

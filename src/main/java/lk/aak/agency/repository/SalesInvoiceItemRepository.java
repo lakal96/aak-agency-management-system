@@ -11,5 +11,7 @@ public interface SalesInvoiceItemRepository
     List<SalesInvoiceItem>
     findBySalesInvoiceIdOrderByIdAsc(Long salesInvoiceId);
 
+    boolean existsByProductId(Long productId);
+
     void deleteBySalesInvoiceId(Long salesInvoiceId);
 }

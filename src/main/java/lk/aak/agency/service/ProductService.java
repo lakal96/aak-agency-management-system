@@ -2,6 +2,10 @@ package lk.aak.agency.service;
 
 import lk.aak.agency.model.Product;
 import lk.aak.agency.repository.ProductRepository;
+import lk.aak.agency.repository.PurchaseInvoiceItemRepository;
+import lk.aak.agency.repository.SalesInvoiceItemRepository;
+import lk.aak.agency.repository.ShopReturnItemRepository;
+import lk.aak.agency.repository.StockAdjustmentRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -15,13 +19,25 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final AuditLogService auditLogService;
+    private final SalesInvoiceItemRepository salesInvoiceItemRepository;
+    private final PurchaseInvoiceItemRepository purchaseInvoiceItemRepository;
+    private final StockAdjustmentRepository stockAdjustmentRepository;
+    private final ShopReturnItemRepository shopReturnItemRepository;
 
     public ProductService(
             ProductRepository productRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            SalesInvoiceItemRepository salesInvoiceItemRepository,
+            PurchaseInvoiceItemRepository purchaseInvoiceItemRepository,
+            StockAdjustmentRepository stockAdjustmentRepository,
+            ShopReturnItemRepository shopReturnItemRepository) {
 
         this.productRepository = productRepository;
         this.auditLogService = auditLogService;
+        this.salesInvoiceItemRepository = salesInvoiceItemRepository;
+        this.purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
+        this.stockAdjustmentRepository = stockAdjustmentRepository;
+        this.shopReturnItemRepository = shopReturnItemRepository;
     }
 
     public List<Product> getAllProducts() {
@@ -102,6 +118,16 @@ public class ProductService {
     public void deleteProduct(Long id) {
 
         Product product = productRepository.findById(id).orElse(null);
+
+        if (salesInvoiceItemRepository.existsByProductId(id)
+                || purchaseInvoiceItemRepository.existsByProductId(id)
+                || stockAdjustmentRepository.existsByProductId(id)
+                || shopReturnItemRepository.existsByProductId(id)) {
+            throw new IllegalArgumentException(
+                    "This product has sales, purchase, adjustment or return history and cannot be deleted. "
+                            + "Set its status to INACTIVE instead."
+            );
+        }
 
         productRepository.deleteById(id);
 

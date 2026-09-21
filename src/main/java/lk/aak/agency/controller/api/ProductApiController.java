@@ -68,6 +68,7 @@ public class ProductApiController {
         return ResponseEntity.status(HttpStatus.CREATED).body(new ProductResponse(saved));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ProductResponse update(@PathVariable Long id, @Valid @RequestBody ProductRequest request) {
         Product product = productService.getProductById(id)

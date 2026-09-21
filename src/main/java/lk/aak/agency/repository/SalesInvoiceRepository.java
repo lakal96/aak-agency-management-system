@@ -54,6 +54,8 @@ public interface SalesInvoiceRepository
             Long customerId
     );
 
+    boolean existsByCustomerId(Long customerId);
+
     /*
      * Completed bills not yet assigned to any delivery trip - eligible for loading.
      */

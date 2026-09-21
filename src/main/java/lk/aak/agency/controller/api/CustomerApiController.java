@@ -257,6 +257,7 @@ public class CustomerApiController {
         return ResponseEntity.status(HttpStatus.CREATED).body(new CustomerResponse(saved));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public CustomerResponse update(@PathVariable Long id, @Valid @RequestBody CustomerRequest request) {
 

@@ -8,4 +8,6 @@ import java.util.List;
 public interface ShopReturnItemRepository extends JpaRepository<ShopReturnItem, Long> {
 
     List<ShopReturnItem> findByShopReturnIdOrderByIdAsc(Long shopReturnId);
+
+    boolean existsByProductId(Long productId);
 }

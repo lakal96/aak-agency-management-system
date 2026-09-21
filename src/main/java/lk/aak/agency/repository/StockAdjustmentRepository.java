@@ -15,4 +15,6 @@ public interface StockAdjustmentRepository
     findByProductIdOrderByAdjustmentDateDesc(
             Long productId
     );
+
+    boolean existsByProductId(Long productId);
 }
