@@ -112,6 +112,8 @@ jobs:
           # nginx's config is a bind-mounted file, not part of the image - compose won't detect
           # content changes there, so force-recreate it on every deploy to pick up routing changes.
           docker compose -f /opt/aak-agency/docker-compose.yml up -d --force-recreate nginx
+          # Prevent the small root volume from filling up with stale image layers from past deploys.
+          docker image prune -af
           EOF
           )
           parameters=$(jq -nc --arg commands "$commands" '{commands: [$commands]}')
