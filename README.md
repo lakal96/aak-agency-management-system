@@ -252,12 +252,16 @@ Add a test alongside any new controller/service change, especially anything touc
 This repo owns the build: a GitHub Actions workflow (`.github/workflows/build-and-push.yml`) builds the
 Docker image on every push to `main` and publishes it to GHCR. A second workflow
 (`.github/workflows/deploy-dev.yml`) builds and pushes to Amazon ECR, then deploys to a dev EC2 instance
-via AWS Systems Manager (no SSH keys involved).
+via AWS Systems Manager (no SSH keys involved). That workflow also fetches `docker-compose.yml` and the
+nginx config from this repo's own [`deploy/`](deploy) folder onto the host - so the AWS dev stack's
+compose/nginx files live here, not in `aak-agency-ops`.
 
-Deployment *configuration* (docker-compose, nginx, environment values) lives in the separate
-**[aak-agency-ops](https://github.com/lakal96/aak-agency-ops)** repository, not here - keeping
-"how the app builds" and "where/how it runs" independent so developers never need production secrets
-and ops changes never touch application code.
+For **local, self-hosted** Docker Compose (single machine, no AWS), use the separate
+**[aak-agency-ops](https://github.com/lakal96/aak-agency-ops)** repo instead - it owns a simpler
+`docker-compose.yml`, nginx config and `.env` template for that use case, kept deliberately separate
+from this app repo so build concerns and deploy concerns don't mix. See that repo's README
+(`cp .env.example .env`, fill in values, `./deploy.sh`). `aak-agency-ops` also owns the Terraform that
+provisions the AWS dev environment's VPC/EC2/ECR/OIDC role (`infra/terraform/dev`).
 
 ## Security Notes
 
