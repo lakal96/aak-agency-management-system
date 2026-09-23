@@ -10,6 +10,7 @@ import lk.aak.agency.dto.api.CustomerResponse;
 import lk.aak.agency.dto.api.ImportSummaryResponse;
 import lk.aak.agency.dto.api.PageResponse;
 import lk.aak.agency.dto.api.PaymentResponse;
+import lk.aak.agency.dto.api.ShopScanPreviewResponse;
 import lk.aak.agency.model.Customer;
 import lk.aak.agency.model.Payment;
 import lk.aak.agency.model.SalesInvoice;
@@ -136,6 +137,14 @@ public class CustomerApiController {
     public CustomerResponse scan(@PathVariable String qrCode) {
         return customerService.getCustomerByQrCode(qrCode)
                 .map(CustomerResponse::new)
+                .orElseThrow(() -> new NoSuchElementException("No shop matches this QR code."));
+    }
+
+    /** Public (unauthenticated) preview for a scanned shop QR - shop name only, nothing else. */
+    @GetMapping("/scan/{qrCode}/preview")
+    public ShopScanPreviewResponse scanPreview(@PathVariable String qrCode) {
+        return customerService.getCustomerByQrCode(qrCode)
+                .map(customer -> new ShopScanPreviewResponse(customer.getCustomerName()))
                 .orElseThrow(() -> new NoSuchElementException("No shop matches this QR code."));
     }
 

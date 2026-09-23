@@ -65,6 +65,11 @@ public class ApiSecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
+                        /*
+                         * Scanning a shop's QR code without being logged in only returns the shop
+                         * name - no other customer data is exposed on this public path.
+                         */
+                        .requestMatchers("/api/v1/customers/scan/*/preview").permitAll()
                         .requestMatchers("/api/v1/users/**", "/api/v1/audit-log/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/customers/**", "/api/v1/sales-invoices/**")
                         .hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
