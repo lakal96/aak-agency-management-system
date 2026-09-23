@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Shop QR Code - AAK Agency</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            background:
+                    radial-gradient(circle at 15% 15%, rgba(147, 197, 253, 0.25), transparent 45%),
+                    linear-gradient(135deg, #0b3d91, #082a66);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 25px;
+        }
+
+        .scan-wrapper {
+            width: 100%;
+            max-width: 440px;
+        }
+
+        .brand-section {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .brand-logo {
+            width: 104px;
+            height: 104px;
+            margin: 0 auto 18px;
+            border-radius: 26px;
+            background: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 18px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+        }
+
+        .brand-logo img {
+            width: 100%;
+            height: 100%;
+        }
+
+        .brand-section h1 {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .scan-card {
+            background: white;
+            border-radius: 15px;
+            padding: 35px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25);
+            text-align: center;
+        }
+
+        .scan-card h2 {
+            font-size: 22px;
+            color: #0b3d91;
+            margin-bottom: 12px;
+        }
+
+        .scan-card p {
+            color: #4b5563;
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .login-button {
+            display: inline-block;
+            width: 100%;
+            border: none;
+            border-radius: 8px;
+            padding: 14px;
+            background: linear-gradient(135deg, #0b3d91, #2563eb);
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-decoration: none;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .login-button:hover {
+            box-shadow: 0 8px 20px rgba(11, 61, 145, 0.35);
+            transform: translateY(-1px);
+        }
+
+        .security-note {
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 1px solid #e4e7eb;
+            color: #6c757d;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .footer-text {
+            color: #dce8f5;
+            text-align: center;
+            font-size: 13px;
+            margin-top: 22px;
+        }
+    </style>
+    <link rel="stylesheet" th:href="@{/css/aak-ui.css}" href="/css/aak-ui.css">
+</head>
+
+<body>
+
+<div class="scan-wrapper">
+
+    <section class="brand-section">
+        <div class="brand-logo">
+            <img th:src="@{/img/aak-logo-mark.svg}" src="/img/aak-logo-mark.svg" alt="AAK Agency logo">
+        </div>
+        <h1>AAK Agency</h1>
+    </section>
+
+    <section class="scan-card">
+
+        <!-- Recognized shop code: greet by name only, nothing else about the shop is shown here. -->
+        <div th:if="${shopName}">
+            <h2 th:text="${shopName}">Shop Name</h2>
+            <p>
+                This QR code belongs to the shop above. To view its account or create a bill,
+                please log in to the system first, then scan this code again.
+            </p>
+            <a class="login-button" th:href="@{${loginUrl}}">Log in to continue</a>
+        </div>
+
+        <!-- Unrecognized code: no shop details to show. -->
+        <div th:unless="${shopName}">
+            <h2>Code not recognized</h2>
+            <p>
+                This QR code doesn't match any registered shop. Please contact the AAK Agency office.
+            </p>
+            <a class="login-button" th:href="@{/login}">Go to login</a>
+        </div>
+
+        <div class="security-note">
+            This system is restricted to authorized AAK Agency staff only.
+        </div>
+
+    </section>
+
+    <p class="footer-text">
+        &copy; AAK Agency Distribution Management System
+    </p>
+
+</div>
+
+</body>
+</html>

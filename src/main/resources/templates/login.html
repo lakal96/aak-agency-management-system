@@ -255,8 +255,19 @@
             You have logged out successfully.
         </div>
 
+        <div class="message success-message"
+             th:if="${param.redirect != null and param.error == null}">
+
+            Log in to open the shop you scanned.
+        </div>
+
         <form th:action="@{/login}"
               method="post">
+
+            <input type="hidden"
+                   name="redirect"
+                   th:if="${param.redirect}"
+                   th:value="${param.redirect}">
 
             <div class="form-group">
 

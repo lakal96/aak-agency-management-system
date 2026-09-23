@@ -28,13 +28,19 @@ public class SecurityConfig {
 
     private final CustomUserDetailsService
             customUserDetailsService;
+    private final ScanRedirectAuthenticationSuccessHandler
+            scanRedirectAuthenticationSuccessHandler;
 
     public SecurityConfig(
             CustomUserDetailsService
-                    customUserDetailsService) {
+                    customUserDetailsService,
+            ScanRedirectAuthenticationSuccessHandler
+                    scanRedirectAuthenticationSuccessHandler) {
 
         this.customUserDetailsService =
                 customUserDetailsService;
+        this.scanRedirectAuthenticationSuccessHandler =
+                scanRedirectAuthenticationSuccessHandler;
     }
 
     @Bean
@@ -76,6 +82,14 @@ public class SecurityConfig {
                                                 "/error",
                                                 "/actuator/health"
                                         )
+                                        .permitAll()
+
+                                        /*
+                                         * Scanning a shop's QR code without being logged in shows a
+                                         * shop-name-only teaser and a prompt to log in - no other
+                                         * customer data is exposed on this public path.
+                                         */
+                                        .requestMatchers("/customers/scan/**")
                                         .permitAll()
 
                                         /*
@@ -148,9 +162,8 @@ public class SecurityConfig {
                                         .loginProcessingUrl(
                                                 "/login"
                                         )
-                                        .defaultSuccessUrl(
-                                                "/",
-                                                true
+                                        .successHandler(
+                                                scanRedirectAuthenticationSuccessHandler
                                         )
                                         .failureUrl(
                                                 "/login?error"

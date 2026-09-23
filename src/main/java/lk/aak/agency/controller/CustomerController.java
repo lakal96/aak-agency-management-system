@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -159,16 +160,32 @@ public class CustomerController {
                 .body(pngImage);
     }
 
+    /** Logged-in staff go straight to the shop; anyone else only sees the shop name and a login prompt. */
     @GetMapping("/scan/{qrCode}")
-    public String scanShopQrCode(@PathVariable String qrCode, RedirectAttributes redirectAttributes) {
+    public String scanShopQrCode(
+            @PathVariable String qrCode,
+            Model model,
+            Authentication authentication,
+            RedirectAttributes redirectAttributes) {
 
         Customer customer = customerService.getCustomerByQrCode(qrCode).orElse(null);
 
-        if (customer == null) {
-            redirectAttributes.addFlashAttribute("errorMessage", "No shop matches this QR code.");
-            return "redirect:/customers";
+        boolean loggedIn = authentication != null
+                && authentication.isAuthenticated()
+                && !(authentication instanceof AnonymousAuthenticationToken);
+
+        if (loggedIn) {
+            if (customer == null) {
+                redirectAttributes.addFlashAttribute("errorMessage", "No shop matches this QR code.");
+                return "redirect:/customers";
+            }
+
+            return "redirect:/customers/" + customer.getId() + "/credit-history";
         }
 
-        return "redirect:/customers/" + customer.getId() + "/credit-history";
+        model.addAttribute("shopName", customer != null ? customer.getCustomerName() : null);
+        model.addAttribute("loginUrl", "/login?redirect=/customers/scan/" + qrCode);
+
+        return "customers/scan-landing";
     }
 }
