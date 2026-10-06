@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -72,6 +73,12 @@ public class ApiSecurityConfig {
                         .requestMatchers("/api/v1/customers/scan/*/preview").permitAll()
                         .requestMatchers("/api/v1/users/**", "/api/v1/audit-log/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/customers/**", "/api/v1/sales-invoices/**")
+                        .hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
+                        /*
+                         * SALES_REP needs to browse the product catalog (read-only) to pick line
+                         * items when creating a sales invoice - but can't create/edit/delete products.
+                         */
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/**")
                         .hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
                         .requestMatchers(
                                 "/api/v1/products/**",
