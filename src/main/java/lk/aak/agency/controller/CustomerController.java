@@ -2,6 +2,7 @@ package lk.aak.agency.controller;
 
 import lk.aak.agency.model.Customer;
 import lk.aak.agency.service.CustomerService;
+import lk.aak.agency.service.EmployeeService;
 import lk.aak.agency.service.QrCodeService;
 import lk.aak.agency.service.SalesRepScopeService;
 import jakarta.validation.Valid;
@@ -31,14 +32,17 @@ public class CustomerController {
     private final CustomerService customerService;
     private final QrCodeService qrCodeService;
     private final SalesRepScopeService salesRepScopeService;
+    private final EmployeeService employeeService;
 
     public CustomerController(
             CustomerService customerService,
             QrCodeService qrCodeService,
-            SalesRepScopeService salesRepScopeService) {
+            SalesRepScopeService salesRepScopeService,
+            EmployeeService employeeService) {
         this.customerService = customerService;
         this.qrCodeService = qrCodeService;
         this.salesRepScopeService = salesRepScopeService;
+        this.employeeService = employeeService;
     }
 
     @GetMapping
@@ -62,6 +66,7 @@ public class CustomerController {
     public String showAddCustomerForm(Model model) {
         model.addAttribute("customer", new Customer());
         model.addAttribute("pageTitle", "Add New Customer");
+        model.addAttribute("salesReps", employeeService.getActiveSalesReps());
 
         return "customers/customer-form";
     }
@@ -70,13 +75,17 @@ public class CustomerController {
     public String showEditCustomerForm(
             @PathVariable Long id,
             Model model,
+            Authentication authentication,
             RedirectAttributes redirectAttributes) {
 
         Customer customer = customerService
                 .getCustomerById(id)
                 .orElse(null);
 
-        if (customer == null) {
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+
+        if (customer == null
+                || (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId()))) {
             redirectAttributes.addFlashAttribute(
                     "errorMessage",
                     "Customer not found."
@@ -87,6 +96,7 @@ public class CustomerController {
 
         model.addAttribute("customer", customer);
         model.addAttribute("pageTitle", "Edit Customer");
+        model.addAttribute("salesReps", employeeService.getActiveSalesReps());
 
         return "customers/customer-form";
     }
@@ -96,6 +106,7 @@ public class CustomerController {
             @Valid Customer customer,
             BindingResult bindingResult,
             Model model,
+            Authentication authentication,
             RedirectAttributes redirectAttributes) {
 
         if (bindingResult.hasErrors()) {
@@ -103,8 +114,25 @@ public class CustomerController {
                     "pageTitle",
                     customer.getId() == null ? "Add New Customer" : "Edit Customer"
             );
+            model.addAttribute("salesReps", employeeService.getActiveSalesReps());
 
             return "customers/customer-form";
+        }
+
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+
+        if (scopedEmployeeId != null) {
+            if (customer.getId() != null) {
+                // A SALES_REP may only resave a customer already in their own scope.
+                Customer existing = customerService.getCustomerById(customer.getId()).orElse(null);
+                if (existing == null || !scopedEmployeeId.equals(existing.getAssignedEmployeeId())) {
+                    redirectAttributes.addFlashAttribute("errorMessage", "Customer not found.");
+                    return "redirect:/customers";
+                }
+            }
+
+            // A SALES_REP can only ever assign new/edited shops to themselves.
+            customer.setAssignedEmployeeId(scopedEmployeeId);
         }
 
         customerService.saveCustomer(customer);

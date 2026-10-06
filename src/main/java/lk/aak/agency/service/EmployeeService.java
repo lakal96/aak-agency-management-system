@@ -47,6 +47,10 @@ public class EmployeeService {
         return employeeRepository.findByDesignationAndStatus("HELPER", "ACTIVE");
     }
 
+    public List<Employee> getActiveSalesReps() {
+        return employeeRepository.findByDesignationAndStatus("SALES_REP", "ACTIVE");
+    }
+
     public List<Employee> getActiveFieldCollectors() {
         List<Employee> fieldCollectors = new ArrayList<>(
                 employeeRepository.findByDesignationAndStatus("SALES_REP", "ACTIVE")
