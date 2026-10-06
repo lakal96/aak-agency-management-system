@@ -700,6 +700,12 @@
         </div>
 
         <div class="heading-actions">
+            <a th:href="@{/purchase-invoices/{id}/pdf(id=${invoice.id})}"
+               target="_blank"
+               class="button print-button">
+                Download PDF
+            </a>
+
             <button class="button print-button"
                     type="button"
                     onclick="window.print()">
@@ -1292,6 +1298,12 @@
         </a>
 
         <div class="footer-actions">
+
+            <a th:href="@{/purchase-invoices/{id}/pdf(id=${invoice.id})}"
+               target="_blank"
+               class="button print-button">
+                Download PDF
+            </a>
 
             <button class="button print-button"
                     type="button"

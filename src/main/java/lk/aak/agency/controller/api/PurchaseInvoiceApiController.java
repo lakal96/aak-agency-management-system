@@ -17,6 +17,7 @@ import lk.aak.agency.repository.PurchaseInvoiceItemRepository;
 import lk.aak.agency.repository.PurchaseInvoiceRepository;
 import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.service.PurchaseInvoiceService;
+import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.SupplierPaymentService;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -52,6 +53,7 @@ public class PurchaseInvoiceApiController {
     private final PurchaseInvoiceService purchaseInvoiceService;
     private final PurchaseInvoiceFileService purchaseInvoiceFileService;
     private final SupplierPaymentService supplierPaymentService;
+    private final PdfService pdfService;
 
     public PurchaseInvoiceApiController(
             PurchaseInvoiceRepository purchaseInvoiceRepository,
@@ -59,7 +61,8 @@ public class PurchaseInvoiceApiController {
             ProductRepository productRepository,
             PurchaseInvoiceService purchaseInvoiceService,
             PurchaseInvoiceFileService purchaseInvoiceFileService,
-            SupplierPaymentService supplierPaymentService) {
+            SupplierPaymentService supplierPaymentService,
+            PdfService pdfService) {
 
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
         this.purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
@@ -67,6 +70,7 @@ public class PurchaseInvoiceApiController {
         this.purchaseInvoiceService = purchaseInvoiceService;
         this.purchaseInvoiceFileService = purchaseInvoiceFileService;
         this.supplierPaymentService = supplierPaymentService;
+        this.pdfService = pdfService;
     }
 
     @GetMapping("/supplier-balance")
@@ -115,6 +119,21 @@ public class PurchaseInvoiceApiController {
                 .toList();
 
         return new PurchaseInvoiceDetailResponse(new PurchaseInvoiceResponse(invoice), items);
+    }
+
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> pdf(@PathVariable Long id) {
+
+        PurchaseInvoice invoice = purchaseInvoiceRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Purchase invoice not found."));
+
+        var items = purchaseInvoiceItemRepository.findByPurchaseInvoiceIdOrderByIdAsc(id);
+
+        byte[] pdf = pdfService.generatePurchaseInvoicePdf(invoice, items);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"purchase-invoice-" + invoice.getDocumentNumber() + ".pdf\"")
+                .body(pdf);
     }
 
     @PostMapping

@@ -16,12 +16,15 @@ import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.SalesInvoiceItemRepository;
 import lk.aak.agency.repository.SalesInvoiceRepository;
 import lk.aak.agency.service.PaymentService;
+import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.SalesInvoiceService;
 import lk.aak.agency.service.SalesRepScopeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -49,6 +52,7 @@ public class SalesInvoiceApiController {
     private final SalesInvoiceService salesInvoiceService;
     private final PaymentService paymentService;
     private final SalesRepScopeService salesRepScopeService;
+    private final PdfService pdfService;
 
     public SalesInvoiceApiController(
             SalesInvoiceRepository salesInvoiceRepository,
@@ -57,7 +61,8 @@ public class SalesInvoiceApiController {
             ProductRepository productRepository,
             SalesInvoiceService salesInvoiceService,
             PaymentService paymentService,
-            SalesRepScopeService salesRepScopeService) {
+            SalesRepScopeService salesRepScopeService,
+            PdfService pdfService) {
 
         this.salesInvoiceRepository = salesInvoiceRepository;
         this.salesInvoiceItemRepository = salesInvoiceItemRepository;
@@ -66,6 +71,7 @@ public class SalesInvoiceApiController {
         this.salesInvoiceService = salesInvoiceService;
         this.paymentService = paymentService;
         this.salesRepScopeService = salesRepScopeService;
+        this.pdfService = pdfService;
     }
 
     @GetMapping
@@ -100,6 +106,25 @@ public class SalesInvoiceApiController {
         BigDecimal net = invoice.getNetAmount() == null ? BigDecimal.ZERO : invoice.getNetAmount();
 
         return new SalesInvoiceDetailResponse(new SalesInvoiceResponse(invoice), items, paid, net.subtract(paid));
+    }
+
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> pdf(@PathVariable Long id, Authentication authentication) {
+
+        SalesInvoice invoice = salesInvoiceRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Sales invoice not found."));
+
+        assertVisible(invoice, authentication);
+
+        var items = salesInvoiceItemRepository.findBySalesInvoiceIdOrderByIdAsc(id);
+        BigDecimal paid = paymentService.getPaidAmount(id);
+        BigDecimal net = invoice.getNetAmount() == null ? BigDecimal.ZERO : invoice.getNetAmount();
+
+        byte[] pdf = pdfService.generateSalesInvoicePdf(invoice, items, paid, net.subtract(paid));
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"sales-invoice-" + invoice.getInvoiceNumber() + ".pdf\"")
+                .body(pdf);
     }
 
     @PostMapping

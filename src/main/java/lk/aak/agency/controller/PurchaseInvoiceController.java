@@ -5,6 +5,7 @@ import lk.aak.agency.model.PurchaseInvoice;
 import lk.aak.agency.model.PurchaseInvoiceItem;
 import lk.aak.agency.model.SupplierPayment;
 import lk.aak.agency.repository.ProductRepository;
+import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.service.PurchaseInvoiceService;
 import lk.aak.agency.service.SupplierPaymentService;
@@ -44,17 +45,20 @@ public class PurchaseInvoiceController {
     private final ProductRepository productRepository;
     private final PurchaseInvoiceFileService purchaseInvoiceFileService;
     private final SupplierPaymentService supplierPaymentService;
+    private final PdfService pdfService;
 
     public PurchaseInvoiceController(
             PurchaseInvoiceService purchaseInvoiceService,
             ProductRepository productRepository,
             PurchaseInvoiceFileService purchaseInvoiceFileService,
-            SupplierPaymentService supplierPaymentService) {
+            SupplierPaymentService supplierPaymentService,
+            PdfService pdfService) {
 
         this.purchaseInvoiceService = purchaseInvoiceService;
         this.productRepository = productRepository;
         this.purchaseInvoiceFileService = purchaseInvoiceFileService;
         this.supplierPaymentService = supplierPaymentService;
+        this.pdfService = pdfService;
     }
 
     @GetMapping
@@ -339,6 +343,19 @@ public class PurchaseInvoiceController {
         );
 
         return "purchase-invoices/purchase-invoice-view";
+    }
+
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> downloadPdf(@PathVariable Long id) {
+
+        PurchaseInvoice invoice = purchaseInvoiceService.getInvoiceById(id);
+        var items = purchaseInvoiceService.getItemsByInvoiceId(id);
+
+        byte[] pdf = pdfService.generatePurchaseInvoicePdf(invoice, items);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"purchase-invoice-" + invoice.getDocumentNumber() + ".pdf\"")
+                .body(pdf);
     }
 
     @GetMapping("/{invoiceId}/original-file")

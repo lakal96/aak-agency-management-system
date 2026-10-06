@@ -991,6 +991,12 @@
 
             <div class="action-group">
 
+                <a th:href="@{/sales-invoices/{id}/pdf(id=${invoice.id})}"
+                   target="_blank"
+                   class="button print-button">
+                    Download PDF
+                </a>
+
                 <button type="button"
                         class="button print-button"
                         onclick="window.print()">

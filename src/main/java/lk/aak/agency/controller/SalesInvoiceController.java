@@ -6,10 +6,15 @@ import lk.aak.agency.model.SalesInvoice;
 import lk.aak.agency.model.SalesInvoiceItem;
 import lk.aak.agency.repository.CustomerRepository;
 import lk.aak.agency.repository.ProductRepository;
+import lk.aak.agency.service.PaymentService;
+import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.SalesInvoiceService;
 import lk.aak.agency.service.SalesRepScopeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -38,12 +43,16 @@ public class SalesInvoiceController {
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
     private final SalesRepScopeService salesRepScopeService;
+    private final PaymentService paymentService;
+    private final PdfService pdfService;
 
     public SalesInvoiceController(
             SalesInvoiceService salesInvoiceService,
             CustomerRepository customerRepository,
             ProductRepository productRepository,
-            SalesRepScopeService salesRepScopeService) {
+            SalesRepScopeService salesRepScopeService,
+            PaymentService paymentService,
+            PdfService pdfService) {
 
         this.salesInvoiceService =
                 salesInvoiceService;
@@ -55,6 +64,8 @@ public class SalesInvoiceController {
                 productRepository;
 
         this.salesRepScopeService = salesRepScopeService;
+        this.paymentService = paymentService;
+        this.pdfService = pdfService;
     }
 
     @GetMapping
@@ -292,6 +303,25 @@ public class SalesInvoiceController {
         addProductData(model);
 
         return "sales-invoices/sales-invoice-view";
+    }
+
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> downloadPdf(
+            @PathVariable Long id,
+            Authentication authentication) {
+
+        SalesInvoice invoice = salesInvoiceService.getInvoiceById(id);
+        assertVisible(invoice, authentication);
+
+        List<SalesInvoiceItem> items = salesInvoiceService.getItemsByInvoiceId(id);
+        BigDecimal paid = paymentService.getPaidAmount(id);
+        BigDecimal net = invoice.getNetAmount() == null ? BigDecimal.ZERO : invoice.getNetAmount();
+
+        byte[] pdf = pdfService.generateSalesInvoicePdf(invoice, items, paid, net.subtract(paid));
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"sales-invoice-" + invoice.getInvoiceNumber() + ".pdf\"")
+                .body(pdf);
     }
 
     @PostMapping("/{invoiceId}/items/save")
