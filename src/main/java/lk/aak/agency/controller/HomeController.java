@@ -11,6 +11,7 @@ import lk.aak.agency.repository.SalesInvoiceRepository;
 import lk.aak.agency.repository.StockMovementRepository;
 import lk.aak.agency.repository.SystemUserRepository;
 import lk.aak.agency.service.InventoryService;
+import lk.aak.agency.service.SalesRepScopeService;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -35,6 +36,7 @@ public class HomeController {
     private final PaymentRepository paymentRepository;
     private final SystemUserRepository systemUserRepository;
     private final InventoryService inventoryService;
+    private final SalesRepScopeService salesRepScopeService;
 
     public HomeController(
             CustomerRepository customerRepository,
@@ -44,7 +46,8 @@ public class HomeController {
             StockMovementRepository stockMovementRepository,
             PaymentRepository paymentRepository,
             SystemUserRepository systemUserRepository,
-            InventoryService inventoryService) {
+            InventoryService inventoryService,
+            SalesRepScopeService salesRepScopeService) {
 
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
@@ -54,6 +57,7 @@ public class HomeController {
         this.paymentRepository = paymentRepository;
         this.systemUserRepository = systemUserRepository;
         this.inventoryService = inventoryService;
+        this.salesRepScopeService = salesRepScopeService;
     }
 
     @GetMapping("/")
@@ -61,9 +65,13 @@ public class HomeController {
             Model model,
             Authentication authentication) {
 
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+
         model.addAttribute(
                 "totalCustomers",
-                customerRepository.count()
+                scopedEmployeeId == null
+                        ? customerRepository.count()
+                        : customerRepository.countByAssignedEmployeeId(scopedEmployeeId)
         );
 
         model.addAttribute(
@@ -76,9 +84,14 @@ public class HomeController {
                 purchaseInvoiceRepository.count()
         );
 
+        List<SalesInvoice> invoices =
+                scopedEmployeeId == null
+                        ? salesInvoiceRepository.findAll()
+                        : salesInvoiceRepository.findByCustomer_AssignedEmployeeId(scopedEmployeeId);
+
         model.addAttribute(
                 "totalSalesInvoices",
-                salesInvoiceRepository.count()
+                (long) invoices.size()
         );
 
         model.addAttribute(
@@ -90,9 +103,6 @@ public class HomeController {
                 "totalPayments",
                 paymentRepository.count()
         );
-
-        List<SalesInvoice> invoices =
-                salesInvoiceRepository.findAll();
 
         model.addAttribute(
                 "outstandingCredit",

@@ -7,6 +7,8 @@ import lk.aak.agency.repository.CustomerRepository;
 import lk.aak.agency.repository.PaymentRepository;
 import lk.aak.agency.repository.SalesInvoiceRepository;
 import lk.aak.agency.service.PaymentService;
+import lk.aak.agency.service.SalesRepScopeService;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,29 +33,41 @@ public class CustomerCreditController {
     private final SalesInvoiceRepository salesInvoiceRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentService paymentService;
+    private final SalesRepScopeService salesRepScopeService;
 
     public CustomerCreditController(
             CustomerRepository customerRepository,
             SalesInvoiceRepository salesInvoiceRepository,
             PaymentRepository paymentRepository,
-            PaymentService paymentService) {
+            PaymentService paymentService,
+            SalesRepScopeService salesRepScopeService) {
 
         this.customerRepository = customerRepository;
         this.salesInvoiceRepository = salesInvoiceRepository;
         this.paymentRepository = paymentRepository;
         this.paymentService = paymentService;
+        this.salesRepScopeService = salesRepScopeService;
     }
 
     @GetMapping("/{id}/credit-history")
     public String showCreditHistory(
             @PathVariable Long id,
-            Model model) {
+            Model model,
+            Authentication authentication,
+            org.springframework.web.servlet.mvc.support.RedirectAttributes redirectAttributes) {
 
         Customer customer = customerRepository
                 .findById(id)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Customer not found: " + id
                 ));
+
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+
+        if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Customer not found.");
+            return "redirect:/customers";
+        }
 
         List<SalesInvoice> creditInvoices = salesInvoiceRepository
                 .findByCustomerIdOrderByInvoiceDateDesc(id)
@@ -123,15 +137,20 @@ public class CustomerCreditController {
      * proposal's own wording for the Credit Follow-up report the owner needs.
      */
     @GetMapping("/credit-followup")
-    public String showCreditFollowUp(Model model) {
+    public String showCreditFollowUp(Model model, Authentication authentication) {
 
         LocalDate today = LocalDate.now(SRI_LANKA_TIME_ZONE);
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
 
         List<CreditFollowUpRow> rows = new java.util.ArrayList<>();
         BigDecimal totalOutstanding = BigDecimal.ZERO;
         BigDecimal totalOverdue = BigDecimal.ZERO;
 
         for (Customer customer : customerRepository.findAll()) {
+
+            if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+                continue;
+            }
 
             List<SalesInvoice> creditInvoices = salesInvoiceRepository
                     .findByCustomerIdOrderByInvoiceDateDesc(customer.getId())

@@ -27,6 +27,15 @@ public interface SalesInvoiceRepository
     findAllByOrderByInvoiceDateDesc();
 
     /*
+     * All invoices for customers assigned to one employee - backs the dashboard's
+     * SALES_REP-scoped totals/outstanding-credit/overdue calculations.
+     */
+    List<SalesInvoice>
+    findByCustomer_AssignedEmployeeId(
+            Long employeeId
+    );
+
+    /*
      * Paginated list, optionally filtered by invoice number, customer name/area,
      * route code, sale type or status - keeps the list screen usable at scale.
      * employeeId scopes results to one assigned employee's customers (SALES_REP

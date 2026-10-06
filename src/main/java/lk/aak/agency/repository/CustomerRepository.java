@@ -21,6 +21,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     long countByStatus(String status);
 
+    long countByAssignedEmployeeId(Long assignedEmployeeId);
+
     /*
      * Paginated list, optionally filtered by name, code, area, contact person or phone -
      * backs the REST API's list endpoint (the Thymeleaf list page isn't searchable yet).
