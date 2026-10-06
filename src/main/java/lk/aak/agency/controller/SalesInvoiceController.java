@@ -83,7 +83,7 @@ public class SalesInvoiceController {
     }
 
     @GetMapping("/new")
-    public String showNewInvoiceForm(Model model) {
+    public String showNewInvoiceForm(Model model, Authentication authentication) {
 
         SalesInvoice salesInvoice =
                 new SalesInvoice();
@@ -122,7 +122,7 @@ public class SalesInvoiceController {
                 new ArrayList<SalesInvoiceItem>()
         );
 
-        addFormData(model);
+        addFormData(model, salesRepScopeService.resolveScopedEmployeeId(authentication));
 
         return "sales-invoices/sales-invoice-form";
     }
@@ -131,12 +131,15 @@ public class SalesInvoiceController {
     public String showEditInvoiceForm(
             @PathVariable Long id,
             Model model,
+            Authentication authentication,
             RedirectAttributes redirectAttributes) {
 
         try {
             SalesInvoice salesInvoice =
                     salesInvoiceService
                             .getInvoiceById(id);
+
+            assertVisible(salesInvoice, authentication);
 
             if ("COMPLETED".equalsIgnoreCase(
                     salesInvoice.getStatus())) {
@@ -161,15 +164,15 @@ public class SalesInvoiceController {
                             .getItemsByInvoiceId(id)
             );
 
-            addFormData(model);
+            addFormData(model, salesRepScopeService.resolveScopedEmployeeId(authentication));
 
             return "sales-invoices/sales-invoice-form";
 
-        } catch (IllegalArgumentException exception) {
+        } catch (IllegalArgumentException | java.util.NoSuchElementException exception) {
 
             redirectAttributes.addFlashAttribute(
                     "errorMessage",
-                    exception.getMessage()
+                    "Sales invoice not found."
             );
 
             return "redirect:/sales-invoices";
@@ -200,11 +203,22 @@ public class SalesInvoiceController {
             )
             List<BigDecimal> unitPrices,
 
+            Authentication authentication,
             RedirectAttributes redirectAttributes) {
 
         try {
+            Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+
+            if (salesInvoice.getId() != null) {
+                assertVisible(salesInvoiceService.getInvoiceById(salesInvoice.getId()), authentication);
+            }
+
             Customer customer =
                     findCustomer(customerId);
+
+            if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+                throw new IllegalArgumentException("Selected customer was not found.");
+            }
 
             salesInvoice.setCustomer(customer);
 
@@ -256,6 +270,8 @@ public class SalesInvoiceController {
                 salesInvoiceService
                         .getInvoiceById(id);
 
+        assertVisible(invoice, authentication);
+
         model.addAttribute(
                 "invoice",
                 invoice
@@ -284,12 +300,15 @@ public class SalesInvoiceController {
             @RequestParam Long productId,
             @RequestParam BigDecimal quantity,
             @RequestParam BigDecimal unitPrice,
+            Authentication authentication,
             RedirectAttributes redirectAttributes) {
 
         try {
             SalesInvoice invoice =
                     salesInvoiceService
                             .getInvoiceById(invoiceId);
+
+            assertVisible(invoice, authentication);
 
             Product product =
                     findProduct(productId);
@@ -353,9 +372,12 @@ public class SalesInvoiceController {
     @PostMapping("/{invoiceId}/complete")
     public String completeInvoice(
             @PathVariable Long invoiceId,
+            Authentication authentication,
             RedirectAttributes redirectAttributes) {
 
         try {
+            assertVisible(salesInvoiceService.getInvoiceById(invoiceId), authentication);
+
             salesInvoiceService
                     .completeInvoice(invoiceId);
 
@@ -540,20 +562,36 @@ public class SalesInvoiceController {
                 );
     }
 
-    private void addFormData(Model model) {
+    private void addFormData(Model model, Long scopedEmployeeId) {
 
-        model.addAttribute(
-                "customers",
+        List<Customer> customers =
                 customerRepository.findAll(
                         Sort.by(
                                 Sort.Order.asc(
                                         "customerName"
                                 )
                         )
-                )
-        );
+                );
+
+        if (scopedEmployeeId != null) {
+            customers = customers.stream()
+                    .filter(customer -> scopedEmployeeId.equals(customer.getAssignedEmployeeId()))
+                    .toList();
+        }
+
+        model.addAttribute("customers", customers);
 
         addProductData(model);
+    }
+
+    /** Hides a sales invoice outside a SALES_REP's assigned scope by reporting it as not found. */
+    private void assertVisible(SalesInvoice invoice, Authentication authentication) {
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        if (scopedEmployeeId != null
+                && (invoice.getCustomer() == null
+                        || !scopedEmployeeId.equals(invoice.getCustomer().getAssignedEmployeeId()))) {
+            throw new IllegalArgumentException("Sales invoice not found.");
+        }
     }
 
     private void addProductData(Model model) {

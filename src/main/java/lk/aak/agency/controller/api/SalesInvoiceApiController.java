@@ -90,12 +90,7 @@ public class SalesInvoiceApiController {
         SalesInvoice invoice = salesInvoiceRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Sales invoice not found."));
 
-        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
-        Customer invoiceCustomer = invoice.getCustomer();
-        if (scopedEmployeeId != null
-                && (invoiceCustomer == null || !scopedEmployeeId.equals(invoiceCustomer.getAssignedEmployeeId()))) {
-            throw new NoSuchElementException("Sales invoice not found.");
-        }
+        assertVisible(invoice, authentication);
 
         var items = salesInvoiceItemRepository.findBySalesInvoiceIdOrderByIdAsc(id).stream()
                 .map(SalesInvoiceItemResponse::new)
@@ -108,25 +103,36 @@ public class SalesInvoiceApiController {
     }
 
     @PostMapping
-    public ResponseEntity<SalesInvoiceDetailResponse> create(@Valid @RequestBody SalesInvoiceCreateRequest request) {
+    public ResponseEntity<SalesInvoiceDetailResponse> create(
+            @Valid @RequestBody SalesInvoiceCreateRequest request,
+            Authentication authentication) {
         SalesInvoice invoice = new SalesInvoice();
-        SalesInvoice saved = saveWithItems(invoice, request);
+        SalesInvoice saved = saveWithItems(invoice, request, authentication);
         return ResponseEntity.status(HttpStatus.CREATED).body(toDetail(saved));
     }
 
     @PutMapping("/{id}")
-    public SalesInvoiceDetailResponse update(@PathVariable Long id, @Valid @RequestBody SalesInvoiceCreateRequest request) {
+    public SalesInvoiceDetailResponse update(
+            @PathVariable Long id,
+            @Valid @RequestBody SalesInvoiceCreateRequest request,
+            Authentication authentication) {
         SalesInvoice invoice = salesInvoiceRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Sales invoice not found."));
-        SalesInvoice saved = saveWithItems(invoice, request);
+        assertVisible(invoice, authentication);
+        SalesInvoice saved = saveWithItems(invoice, request, authentication);
         return toDetail(saved);
     }
 
     @PostMapping("/{id}/complete")
-    public void complete(@PathVariable Long id) {
+    public void complete(@PathVariable Long id, Authentication authentication) {
+        assertVisible(
+                salesInvoiceRepository.findById(id)
+                        .orElseThrow(() -> new NoSuchElementException("Sales invoice not found.")),
+                authentication);
         salesInvoiceService.completeInvoice(id);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/complete-with-override")
     public void completeWithOverride(@PathVariable Long id, @Valid @RequestBody CreditOverrideRequest request) {
         salesInvoiceService.completeInvoiceWithCreditOverride(id, request.getApprovedBy(), request.getReason());
@@ -139,9 +145,14 @@ public class SalesInvoiceApiController {
         return ResponseEntity.noContent().build();
     }
 
-    private SalesInvoice saveWithItems(SalesInvoice invoice, SalesInvoiceCreateRequest request) {
+    private SalesInvoice saveWithItems(SalesInvoice invoice, SalesInvoiceCreateRequest request, Authentication authentication) {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new IllegalArgumentException("Selected shop was not found."));
+
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+            throw new IllegalArgumentException("Selected shop was not found.");
+        }
 
         invoice.setCustomer(customer);
         invoice.setInvoiceNumber(request.getInvoiceNumber());
@@ -176,5 +187,15 @@ public class SalesInvoiceApiController {
         BigDecimal net = invoice.getNetAmount() == null ? BigDecimal.ZERO : invoice.getNetAmount();
 
         return new SalesInvoiceDetailResponse(new SalesInvoiceResponse(invoice), items, paid, net.subtract(paid));
+    }
+
+    /** Hides a sales invoice outside a SALES_REP's assigned scope by reporting it as not found. */
+    private void assertVisible(SalesInvoice invoice, Authentication authentication) {
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        Customer invoiceCustomer = invoice.getCustomer();
+        if (scopedEmployeeId != null
+                && (invoiceCustomer == null || !scopedEmployeeId.equals(invoiceCustomer.getAssignedEmployeeId()))) {
+            throw new NoSuchElementException("Sales invoice not found.");
+        }
     }
 }
