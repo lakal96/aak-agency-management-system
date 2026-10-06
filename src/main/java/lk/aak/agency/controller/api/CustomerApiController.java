@@ -115,10 +115,11 @@ public class CustomerApiController {
 
     /** The shop's printable QR code (PNG) - scanning it opens this shop's credit history. */
     @GetMapping(value = "/{id}/qr-code", produces = MediaType.IMAGE_PNG_VALUE)
-    public ResponseEntity<byte[]> qrCode(@PathVariable Long id) {
+    public ResponseEntity<byte[]> qrCode(@PathVariable Long id, Authentication authentication) {
 
         Customer customer = customerService.getCustomerById(id)
                 .orElseThrow(() -> new NoSuchElementException("Customer not found."));
+        assertVisible(customer, authentication);
 
         String scanUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/customers/scan/{qrCode}")
@@ -149,10 +150,11 @@ public class CustomerApiController {
     }
 
     @GetMapping("/{id}/credit-history")
-    public CustomerCreditHistoryResponse creditHistory(@PathVariable Long id) {
+    public CustomerCreditHistoryResponse creditHistory(@PathVariable Long id, Authentication authentication) {
 
         Customer customer = customerService.getCustomerById(id)
                 .orElseThrow(() -> new NoSuchElementException("Customer not found."));
+        assertVisible(customer, authentication);
 
         List<SalesInvoice> creditInvoices = salesInvoiceRepository
                 .findByCustomerIdOrderByInvoiceDateDesc(id).stream()
@@ -274,10 +276,16 @@ public class CustomerApiController {
     }
 
     @PostMapping
-    public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CustomerRequest request) {
+    public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CustomerRequest request, Authentication authentication) {
 
         Customer customer = new Customer();
         applyRequest(customer, request);
+
+        // A SALES_REP can only ever assign new shops to themselves, never to another employee.
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        if (scopedEmployeeId != null) {
+            customer.setAssignedEmployeeId(scopedEmployeeId);
+        }
 
         Customer saved = customerService.saveCustomer(customer);
 
