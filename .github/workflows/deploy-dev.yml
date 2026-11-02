@@ -14,8 +14,17 @@ env:
   ECR_REPOSITORY: aak-dev-app
   DEPLOY_REPOSITORY: https://raw.githubusercontent.com/lakal96/aak-agency-management-system/main/deploy
 
+# Only one deploy may touch the dev host at a time; a newer push waits for the running one.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
   build-and-deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout application
