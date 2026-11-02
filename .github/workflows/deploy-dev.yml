@@ -12,6 +12,7 @@ permissions:
 env:
   AWS_REGION: ap-southeast-1
   ECR_REPOSITORY: aak-dev-app
+  APP_DOMAIN: aakagency.work.gd
   DEPLOY_REPOSITORY: https://raw.githubusercontent.com/lakal96/aak-agency-management-system/main/deploy
 
 # Only one deploy may touch the dev host at a time; a newer push waits for the running one.
@@ -63,8 +64,15 @@ jobs:
         env:
           INSTANCE_ID: ${{ steps.instance.outputs.instance_id }}
           ACCOUNT_ID: ${{ steps.login-ecr.outputs.registry }}
+          LETSENCRYPT_EMAIL: ${{ vars.LETSENCRYPT_EMAIL }}
         run: |
           registry="${ACCOUNT_ID%%/*}"
+          # Let's Encrypt sends expiry warnings here; without it we register anonymously.
+          if [ -n "$LETSENCRYPT_EMAIL" ]; then
+            email_args="--email $LETSENCRYPT_EMAIL"
+          else
+            email_args="--register-unsafely-without-email"
+          fi
           commands=$(cat <<EOF
           set -e
           mkdir -p /opt/aak-agency/nginx/certs
@@ -83,6 +91,9 @@ jobs:
           fi
           curl -fsSL "$DEPLOY_REPOSITORY/docker-compose.yml" -o /opt/aak-agency/docker-compose.yml
           curl -fsSL "$DEPLOY_REPOSITORY/nginx/aak-agency.conf" -o /opt/aak-agency/nginx/aak-agency.conf
+          mkdir -p /opt/aak-agency/certbot/www /opt/aak-agency/certbot/conf /opt/aak-agency/certbot/hooks
+          curl -fsSL "$DEPLOY_REPOSITORY/certbot/deploy-hook.sh" -o /opt/aak-agency/certbot/hooks/deploy-hook.sh
+          chmod +x /opt/aak-agency/certbot/hooks/deploy-hook.sh
           if [ ! -f /opt/aak-agency/nginx/certs/cert.pem ]; then
             token=\$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
             public_ip=\$(curl -fsS -H "X-aws-ec2-metadata-token: \$token" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "localhost")
@@ -121,6 +132,19 @@ jobs:
           # nginx's config is a bind-mounted file, not part of the image - compose won't detect
           # content changes there, so force-recreate it on every deploy to pick up routing changes.
           docker compose -f /opt/aak-agency/docker-compose.yml up -d --force-recreate nginx
+          # First-time Let's Encrypt issuance for $APP_DOMAIN. Rehearse against the staging CA first
+          # (dry run, no rate-limit cost); only request the real certificate if that passes. A failure
+          # here keeps the current certificate and never fails the deploy.
+          if [ ! -d "/opt/aak-agency/certbot/conf/live/$APP_DOMAIN" ]; then
+            certbot_run="docker compose -f /opt/aak-agency/docker-compose.yml run -T --rm --entrypoint certbot certbot"
+            if \$certbot_run certonly --webroot -w /var/www/certbot -d $APP_DOMAIN $email_args --agree-tos --non-interactive --dry-run; then
+              \$certbot_run certonly --webroot -w /var/www/certbot -d $APP_DOMAIN $email_args --agree-tos --non-interactive --deploy-hook /hooks/deploy-hook.sh \
+                && docker compose -f /opt/aak-agency/docker-compose.yml exec -T nginx nginx -s reload \
+                || echo "WARNING: Let's Encrypt issuance failed; keeping the existing certificate"
+            else
+              echo "WARNING: Let's Encrypt dry run failed (DNS, port 80, or rate limit); keeping the existing certificate"
+            fi
+          fi
           # Prevent the small root volume from filling up with stale image layers from past deploys.
           docker image prune -af
           EOF
