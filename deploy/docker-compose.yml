@@ -1,8 +1,16 @@
+# Keep container logs from slowly filling the small root disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   mysql:
     image: mysql:8.0
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-aak_agency_db}
@@ -22,6 +30,7 @@ services:
   app:
     image: ${APP_IMAGE}:${APP_IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       mysql:
         condition: service_healthy
@@ -30,6 +39,13 @@ services:
       DB_USERNAME: ${MYSQL_USER:-aak_app}
       DB_PASSWORD: ${MYSQL_PASSWORD}
       DDL_AUTO: ${DDL_AUTO:-validate}
+      # Required: compose refuses to start the stack if it is missing, instead of silently
+      # falling back to the dev-only default that is published in this repo.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in /opt/aak-agency/.env}
+      # Served over HTTPS behind nginx: Secure refresh cookie. With this true the app also refuses
+      # to boot if JWT_SECRET is the dev default (see JwtService).
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://aakagency.work.gd}
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
       APP_ADMIN_FULL_NAME: ${APP_ADMIN_FULL_NAME:-AAK Agency Owner}
@@ -43,6 +59,7 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE:-992382529780.dkr.ecr.ap-southeast-1.amazonaws.com/aak-dev-frontend}:${FRONTEND_IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - internal
     expose:
@@ -51,6 +68,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - app
       - frontend
@@ -71,6 +89,7 @@ services:
   certbot:
     image: certbot/certbot:v5.9.0
     restart: unless-stopped
+    logging: *default-logging
     entrypoint: /bin/sh
     command: >
       -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done"
