@@ -31,9 +31,11 @@ publish() {
   "$AWS" cloudwatch put-metric-data --region "$REGION" --namespace AAK --metric-name "$1" \
     --dimensions "Env=$METRIC_ENV" --value "$2" --unit "$3" >/dev/null 2>&1 || log "warning: could not publish metric $1"
 }
+# -v matters: the mysql image declares a data volume, so every run creates an anonymous ~200 MB volume that
+# `docker rm -f` alone would leave behind, slowly filling the host's small disk.
 cleanup() {
   rm -rf "$WORK"
-  if [ "$MODE" = docker ]; then docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true
+  if [ "$MODE" = docker ]; then docker rm -fv "$TEST_CONTAINER" >/dev/null 2>&1 || true
   else $LOCAL_MYSQL -e "DROP DATABASE IF EXISTS \`$SCRATCH_DB\`" >/dev/null 2>&1 || true; fi
 }
 on_failure() { local rc=$? line=$1; log "RESTORE TEST FAILED (exit $rc, line $line)"; publish RestoreTestSuccess 0 Count; exit "$rc"; }
@@ -66,7 +68,7 @@ gzip -t "$WORK/backup.sql.gz" || die "backup file is corrupt"
 
 # --- 2. load it into a throw-away MySQL
 if [ "$MODE" = docker ]; then
-  docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true
+  docker rm -fv "$TEST_CONTAINER" >/dev/null 2>&1 || true
   docker run -d --name "$TEST_CONTAINER" -e MYSQL_ROOT_PASSWORD="$TEST_PASSWORD" -e MYSQL_DATABASE=restoretest \
     mysql:8.0 --innodb-buffer-pool-size=64M --skip-log-bin >/dev/null
   for _ in $(seq 1 90); do

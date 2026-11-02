@@ -92,5 +92,9 @@ RESTORE_MODE=local LOCAL_MYSQL="$MYSQL" "$BK/restore-test.sh" > "$T/restore.log"
 check "exits non-zero" test "$rc" -ne 0
 check "RestoreTestSuccess=0 published" test "$(metric RestoreTestSuccess 0)" -ge 1
 
+echo "== restore test: the temporary MySQL container is removed together with its anonymous data volume"
+check "every docker rm in restore-test.sh uses -v (otherwise ~200 MB leaks per run)" bash -c "! grep -E 'docker rm' $BK/restore-test.sh | grep -v -E 'docker rm -fv|^#'"
+check "...and there is at least one" test "$(grep -c 'docker rm -fv' "$BK/restore-test.sh")" -ge 2
+
 echo; echo "passed: $pass   failed: $fail"
 [ "$fail" -eq 0 ]
