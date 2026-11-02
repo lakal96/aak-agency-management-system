@@ -1,9 +1,11 @@
 package lk.aak.agency.repository;
 
+import jakarta.persistence.LockModeType;
 import lk.aak.agency.model.Customer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -44,4 +46,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
             @Param("employeeId") Long employeeId,
             Pageable pageable
     );
+
+    /** Row-locks one Customer (FOR UPDATE) so concurrent completions are serialised. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT x FROM Customer x WHERE x.id = :id")
+    Optional<Customer> lockById(@Param("id") Long id);
 }

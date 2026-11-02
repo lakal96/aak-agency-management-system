@@ -76,6 +76,15 @@ jobs:
           commands=$(cat <<EOF
           set -e
           mkdir -p /opt/aak-agency/nginx/certs
+          # A small swap file is a safety net on this 2 GB host: without it a memory spike during a
+          # deploy (two JVM-heavy containers briefly overlapping) is an instant out-of-memory kill.
+          if [ ! -f /swapfile ] && ! swapon --show | grep -q .; then
+            dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none
+            chmod 600 /swapfile
+            mkswap /swapfile >/dev/null
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          fi
           if ! rpm -q docker >/dev/null 2>&1; then
             dnf install -y docker
           fi
@@ -103,21 +112,31 @@ jobs:
               -subj "/CN=\$public_ip" \
               -addext "subjectAltName=IP:\$public_ip"
           fi
+          # Random secret generator for values that must never be a published default.
+          gen_secret() { openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c "\$1"; }
           if [ ! -f /opt/aak-agency/.env ]; then
-            cat > /opt/aak-agency/.env <<'ENV'
-          APP_IMAGE=REPLACE_WITH_ECR_IMAGE
-          APP_IMAGE_TAG=latest
-          FRONTEND_IMAGE_TAG=latest
-          MYSQL_ROOT_PASSWORD=dev-root-change-me
-          MYSQL_DATABASE=aak_agency_db
-          MYSQL_USER=aak_app
-          MYSQL_PASSWORD=dev-app-change-me
-          DDL_AUTO=validate
-          APP_ADMIN_USERNAME=admin
-          APP_ADMIN_PASSWORD=dev-admin-change-me
-          APP_ADMIN_FULL_NAME=AAK Agency Owner
-          ENV
+            umask 077
+            {
+              echo "APP_IMAGE=REPLACE_WITH_ECR_IMAGE"
+              echo "APP_IMAGE_TAG=latest"
+              echo "FRONTEND_IMAGE_TAG=latest"
+              echo "MYSQL_ROOT_PASSWORD=\$(gen_secret 32)"
+              echo "MYSQL_DATABASE=aak_agency_db"
+              echo "MYSQL_USER=aak_app"
+              echo "MYSQL_PASSWORD=\$(gen_secret 32)"
+              echo "DDL_AUTO=validate"
+              echo "APP_ADMIN_USERNAME=admin"
+              echo "APP_ADMIN_PASSWORD=\$(gen_secret 20)"
+              echo "APP_ADMIN_FULL_NAME=AAK Agency Owner"
+            } > /opt/aak-agency/.env
+            umask 022
           fi
+          # The JWT signing secret signs every login token. Hosts created before this existed have
+          # none in .env, so the app silently used the default published in the repo - make one.
+          if ! grep -q '^JWT_SECRET=' /opt/aak-agency/.env; then
+            echo "JWT_SECRET=\$(gen_secret 64)" >> /opt/aak-agency/.env
+          fi
+          chmod 600 /opt/aak-agency/.env
           # Schema is Flyway-managed now - force validate on every deploy, in case an
           # older .env from before the Flyway migration still has DDL_AUTO=update.
           if grep -q '^DDL_AUTO=' /opt/aak-agency/.env; then

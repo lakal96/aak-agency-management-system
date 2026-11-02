@@ -32,12 +32,14 @@ class StockAdjustmentServiceTest {
     private ProductRepository productRepository;
     @Mock
     private InventoryService inventoryService;
+    @Mock
+    private RowLockService rowLockService;
 
     @Test
     void saveAdjustment_openingStock_alwaysAddsToStockRegardlessOfSelectedDirection() {
 
         StockAdjustmentService service = new StockAdjustmentService(
-                stockAdjustmentRepository, stockMovementRepository, productRepository, inventoryService
+                stockAdjustmentRepository, stockMovementRepository, productRepository, inventoryService, rowLockService
         );
 
         Product product = new Product();
@@ -73,7 +75,7 @@ class StockAdjustmentServiceTest {
     void saveAdjustment_unknownReason_isRejected() {
 
         StockAdjustmentService service = new StockAdjustmentService(
-                stockAdjustmentRepository, stockMovementRepository, productRepository, inventoryService
+                stockAdjustmentRepository, stockMovementRepository, productRepository, inventoryService, rowLockService
         );
 
         StockAdjustment adjustment = new StockAdjustment();

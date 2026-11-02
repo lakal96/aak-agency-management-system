@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -30,13 +31,15 @@ public class SalesInvoiceService {
             stockMovementRepository;
     private final PaymentRepository paymentRepository;
     private final AuditLogService auditLogService;
+    private final RowLockService rowLockService;
 
     public SalesInvoiceService(
             SalesInvoiceRepository salesInvoiceRepository,
             SalesInvoiceItemRepository salesInvoiceItemRepository,
             StockMovementRepository stockMovementRepository,
             PaymentRepository paymentRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            RowLockService rowLockService) {
 
         this.salesInvoiceRepository =
                 salesInvoiceRepository;
@@ -50,6 +53,7 @@ public class SalesInvoiceService {
         this.paymentRepository =
                 paymentRepository;
 
+        this.rowLockService = rowLockService;
         this.auditLogService = auditLogService;
     }
 
@@ -350,7 +354,7 @@ public class SalesInvoiceService {
         validateCustomerCreditLimit(invoice);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void completeInvoice(Long invoiceId) {
         completeInvoiceInternal(invoiceId, null, null);
     }
@@ -360,7 +364,7 @@ public class SalesInvoiceService {
      * the customer's credit limit, recording who approved it and why. Every other check
      * (stock availability, item validation) still applies as normal.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void completeInvoiceWithCreditOverride(
             Long invoiceId, String overrideApprovedBy, String overrideReason) {
 
@@ -383,6 +387,10 @@ public class SalesInvoiceService {
     private void completeInvoiceInternal(
             Long invoiceId, String overrideApprovedBy, String overrideReason) {
 
+        // Serialise concurrent completions of the same invoice: the second caller waits here,
+        // then sees COMPLETED instead of racing the first one.
+        rowLockService.lockSalesInvoice(invoiceId);
+
         SalesInvoice invoice =
                 getInvoiceById(invoiceId);
 
@@ -402,6 +410,20 @@ public class SalesInvoiceService {
             throw new IllegalArgumentException(
                     "Add at least one product before completing the invoice."
             );
+        }
+
+        // Lock every product being sold (and the shop, for its credit limit) before any
+        // stock or credit figure is read, so two simultaneous invoices cannot both pass.
+        rowLockService.lockProducts(
+                items.stream()
+                        .map(SalesInvoiceItem::getProduct)
+                        .filter(java.util.Objects::nonNull)
+                        .map(Product::getId)
+                        .toList()
+        );
+
+        if (invoice.getCustomer() != null) {
+            rowLockService.lockCustomer(invoice.getCustomer().getId());
         }
 
         recalculateInvoiceTotals(invoiceId);
