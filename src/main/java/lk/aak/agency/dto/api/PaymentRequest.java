@@ -31,6 +31,18 @@ public class PaymentRequest {
     private String referenceNumber;
     private String notes;
 
+    // Optional: the driver / collector / rep who took this money in the field. When set, the payment
+    // appears in the daily handover reconciliation until the office confirms it was handed in.
+    private Long collectedByEmployeeId;
+
+    public Long getCollectedByEmployeeId() {
+        return collectedByEmployeeId;
+    }
+
+    public void setCollectedByEmployeeId(Long collectedByEmployeeId) {
+        this.collectedByEmployeeId = collectedByEmployeeId;
+    }
+
     public String getReceiptNumber() {
         return receiptNumber;
     }

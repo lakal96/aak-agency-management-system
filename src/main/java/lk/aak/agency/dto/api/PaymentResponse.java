@@ -21,6 +21,9 @@ public class PaymentResponse {
     private final String status;
     private final String chequeStatus;
     private final String notes;
+    private final Long collectedByEmployeeId;
+    private final String collectedByName;
+    private final String handoverStatus;
 
     public PaymentResponse(Payment payment) {
         this.id = payment.getId();
@@ -39,6 +42,21 @@ public class PaymentResponse {
         this.status = payment.getStatus();
         this.chequeStatus = payment.getChequeStatus();
         this.notes = payment.getNotes();
+        this.collectedByEmployeeId = payment.getCollectedByEmployeeId();
+        this.collectedByName = payment.getCollectedByName();
+        this.handoverStatus = payment.getHandoverStatus();
+    }
+
+    public Long getCollectedByEmployeeId() {
+        return collectedByEmployeeId;
+    }
+
+    public String getCollectedByName() {
+        return collectedByName;
+    }
+
+    public String getHandoverStatus() {
+        return handoverStatus;
     }
 
     public Long getId() {
