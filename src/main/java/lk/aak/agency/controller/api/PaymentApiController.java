@@ -58,6 +58,7 @@ public class PaymentApiController {
         payment.setBankName(request.getBankName());
         payment.setReferenceNumber(request.getReferenceNumber());
         payment.setNotes(request.getNotes());
+        payment.setCollectedByEmployeeId(request.getCollectedByEmployeeId());
 
         Payment saved = paymentService.savePayment(payment);
 
