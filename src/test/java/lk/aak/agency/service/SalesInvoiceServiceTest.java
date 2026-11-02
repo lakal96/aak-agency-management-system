@@ -34,11 +34,13 @@ class SalesInvoiceServiceTest {
     private PaymentRepository paymentRepository;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private RowLockService rowLockService;
 
     private SalesInvoiceService newService() {
         return new SalesInvoiceService(
                 salesInvoiceRepository, salesInvoiceItemRepository,
-                stockMovementRepository, paymentRepository, auditLogService
+                stockMovementRepository, paymentRepository, auditLogService, rowLockService
         );
     }
 

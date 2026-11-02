@@ -7,6 +7,7 @@ import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.StockAdjustmentRepository;
 import lk.aak.agency.repository.StockMovementRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -28,11 +29,15 @@ public class StockAdjustmentService {
     private final InventoryService
             inventoryService;
 
+    private final RowLockService
+            rowLockService;
+
     public StockAdjustmentService(
             StockAdjustmentRepository stockAdjustmentRepository,
             StockMovementRepository stockMovementRepository,
             ProductRepository productRepository,
-            InventoryService inventoryService) {
+            InventoryService inventoryService,
+            RowLockService rowLockService) {
 
         this.stockAdjustmentRepository =
                 stockAdjustmentRepository;
@@ -45,6 +50,9 @@ public class StockAdjustmentService {
 
         this.inventoryService =
                 inventoryService;
+
+        this.rowLockService =
+                rowLockService;
     }
 
     public List<StockAdjustment> getAllAdjustments() {
@@ -74,7 +82,7 @@ public class StockAdjustmentService {
                 );
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StockAdjustment saveAdjustment(
             StockAdjustment adjustment,
             Long productId,
@@ -127,6 +135,9 @@ public class StockAdjustmentService {
         }
 
         if ("OUT".equals(direction)) {
+
+            // Serialise against other stock-reducing requests before reading the balance.
+            rowLockService.lockProducts(java.util.List.of(product.getId()));
 
             BigDecimal currentStock =
                     inventoryService.getCurrentStock(

@@ -11,6 +11,7 @@ import lk.aak.agency.repository.StockMovementRepository;
 import lk.aak.agency.repository.SupplierReturnItemRepository;
 import lk.aak.agency.repository.SupplierReturnRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ public class SupplierReturnService {
     private final ProductRepository productRepository;
     private final StockMovementRepository stockMovementRepository;
     private final InventoryService inventoryService;
+    private final RowLockService rowLockService;
     private final AuditLogService auditLogService;
 
     public SupplierReturnService(
@@ -35,7 +37,8 @@ public class SupplierReturnService {
             ProductRepository productRepository,
             StockMovementRepository stockMovementRepository,
             InventoryService inventoryService,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            RowLockService rowLockService) {
 
         this.supplierReturnRepository = supplierReturnRepository;
         this.supplierReturnItemRepository = supplierReturnItemRepository;
@@ -43,6 +46,7 @@ public class SupplierReturnService {
         this.productRepository = productRepository;
         this.stockMovementRepository = stockMovementRepository;
         this.inventoryService = inventoryService;
+        this.rowLockService = rowLockService;
         this.auditLogService = auditLogService;
     }
 
@@ -116,7 +120,7 @@ public class SupplierReturnService {
      * Owner/office approval - stock is only actually deducted here, re-checked against
      * current availability (which may have changed since items were added).
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void approveReturn(Long supplierReturnId) {
 
         SupplierReturn supplierReturn = supplierReturnRepository.findById(supplierReturnId)
@@ -131,6 +135,11 @@ public class SupplierReturnService {
         if (items.isEmpty()) {
             throw new IllegalArgumentException("Add at least one item before approving this return.");
         }
+
+        // Lock the products first so the availability re-check below cannot race another sale.
+        rowLockService.lockProducts(
+                items.stream().map(item -> item.getProduct().getId()).toList()
+        );
 
         for (SupplierReturnItem item : items) {
 

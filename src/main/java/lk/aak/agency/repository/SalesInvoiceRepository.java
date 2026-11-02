@@ -1,9 +1,11 @@
 package lk.aak.agency.repository;
 
+import jakarta.persistence.LockModeType;
 import lk.aak.agency.model.SalesInvoice;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -85,4 +87,9 @@ public interface SalesInvoiceRepository
     long countByPaymentStatusIn(List<String> paymentStatuses);
 
     List<SalesInvoice> findByPaymentStatusIn(List<String> paymentStatuses);
+
+    /** Row-locks one SalesInvoice (FOR UPDATE) so concurrent completions are serialised. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT x FROM SalesInvoice x WHERE x.id = :id")
+    Optional<SalesInvoice> lockById(@Param("id") Long id);
 }
