@@ -16,10 +16,10 @@ encrypted, versioned, and the server can *add* backups but not delete them, so a
 ## It checks itself
 * `aak-backup.sh` refuses to call a dump good unless it is a complete gzip, large enough, has the expected tables
   and ends with mysqldump's "Dump completed" line, and the S3 copy has exactly the local size.
-* Every Sunday 03:30 `restore-test.sh` restores the newest backup into a throw-away MySQL and compares it with the
+* Every Wednesday and Sunday 03:30 `restore-test.sh` restores the newest backup into a throw-away MySQL and compares it with the
   live database (same tables, sensible row counts). A backup that cannot be restored is reported as a failure.
 * Both publish a CloudWatch metric. An alarm emails the owner if a night's backup is **missing or failed**
-  (which also covers "the server was down" or "the timer stopped"), if the weekly restore test has not passed for a
+  (which also covers "the server was down" or "the timer stopped"), if the restore test has not passed for a
   week, if the server fails its health check, or if the disk is over 80% full.
 
 On the server: `systemctl list-timers 'aak-*'`, `journalctl -u aak-backup.service -n 50`,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Proves the newest nightly backup can really be restored.
+# Proves the newest nightly backup can really be restored (run twice a week by aak-restore-test.timer).
 #
 # Downloads the latest database backup from S3, loads it into a throw-away MySQL, and compares what came
 # back with the live database: same tables, same schema history, and every table's row count not larger
