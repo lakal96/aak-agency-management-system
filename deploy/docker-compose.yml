@@ -57,9 +57,29 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # Reload every 6h so a certificate renewed by the certbot service is picked up without a restart.
+    command: >
+      /bin/sh -c "while :; do sleep 6h; nginx -s reload; done & exec nginx -g 'daemon off;'"
     volumes:
       - ./nginx/aak-agency.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+      - ./certbot/www:/var/www/certbot:ro
+    networks:
+      - internal
+
+  # Renews the Let's Encrypt certificate (first issuance happens in the deploy workflow).
+  certbot:
+    image: certbot/certbot:v5.9.0
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command: >
+      -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done"
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/hooks:/hooks:ro
+      # Writable here (read-only for nginx) so the deploy hook can publish renewed certs.
+      - ./nginx/certs:/etc/nginx/certs
     networks:
       - internal
 
