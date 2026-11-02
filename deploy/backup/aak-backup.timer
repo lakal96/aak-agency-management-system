@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the AAK backup every night
+
+[Timer]
+# 02:30 Sri Lanka time: after the day's work is entered, before the office opens.
+OnCalendar=*-*-* 02:30:00 Asia/Colombo
+# If the host was off at 02:30, run as soon as it is back.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

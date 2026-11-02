@@ -103,6 +103,17 @@ jobs:
           mkdir -p /opt/aak-agency/certbot/www /opt/aak-agency/certbot/conf /opt/aak-agency/certbot/hooks
           curl -fsSL "$DEPLOY_REPOSITORY/certbot/deploy-hook.sh" -o /opt/aak-agency/certbot/hooks/deploy-hook.sh
           chmod +x /opt/aak-agency/certbot/hooks/deploy-hook.sh
+          # Nightly backup + weekly restore test (systemd timers). The scripts only ever add backups to S3.
+          mkdir -p /opt/aak-agency/backup /opt/aak-agency/backups
+          for f in aak-backup.sh restore-test.sh; do
+            curl -fsSL "$DEPLOY_REPOSITORY/backup/\$f" -o "/opt/aak-agency/backup/\$f"
+            chmod 755 "/opt/aak-agency/backup/\$f"
+          done
+          for u in aak-backup.service aak-backup.timer aak-restore-test.service aak-restore-test.timer; do
+            curl -fsSL "$DEPLOY_REPOSITORY/backup/\$u" -o "/etc/systemd/system/\$u"
+          done
+          systemctl daemon-reload
+          systemctl enable --now aak-backup.timer aak-restore-test.timer
           if [ ! -f /opt/aak-agency/nginx/certs/cert.pem ]; then
             token=\$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
             public_ip=\$(curl -fsS -H "X-aws-ec2-metadata-token: \$token" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "localhost")
