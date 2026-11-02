@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Stand-in for the AWS CLI in tests: "S3" is a folder ($FAKE_S3), CloudWatch metrics are lines in $FAKE_LOG.
+set -euo pipefail
+svc="$1"; cmd="$2"; shift 2
+case "$svc $cmd" in
+  "sts get-caller-identity") echo 123456789012 ;;
+  "s3 cp")
+    args=(); while [ $# -gt 0 ]; do case "$1" in --only-show-errors) shift ;; --sse) shift 2 ;; *) args+=("$1"); shift ;; esac; done
+    map() { case "$1" in s3://*) p="${1#s3://}"; echo "$FAKE_S3/$p" ;; *) echo "$1" ;; esac; }
+    src=$(map "${args[0]}"); dst=$(map "${args[1]}"); mkdir -p "$(dirname "$dst")"; cp "$src" "$dst" ;;
+  "s3api head-object")
+    while [ $# -gt 0 ]; do case "$1" in --bucket) b="$2"; shift 2 ;; --key) k="$2"; shift 2 ;; *) shift ;; esac; done
+    f="$FAKE_S3/$b/$k"; [ -f "$f" ] || exit 254; stat -c %s "$f" ;;
+  "s3api list-objects-v2")
+    while [ $# -gt 0 ]; do case "$1" in --bucket) b="$2"; shift 2 ;; --prefix) p="$2"; shift 2 ;; *) shift ;; esac; done
+    newest=$(ls -1t "$FAKE_S3/$b/$p"* 2>/dev/null | head -n 1 || true)
+    if [ -n "$newest" ]; then echo "${newest#"$FAKE_S3/$b/"}"; else echo None; fi ;;
+  "cloudwatch put-metric-data")
+    while [ $# -gt 0 ]; do case "$1" in --metric-name) m="$2"; shift 2 ;; --value) v="$2"; shift 2 ;; *) shift ;; esac; done
+    echo "$m $v" >> "$FAKE_LOG" ;;
+  *) echo "fake-aws: unsupported: $svc $cmd" >&2; exit 2 ;;
+esac

@@ -1,0 +1,11 @@
+[Unit]
+Description=AAK weekly restore test (restore the newest backup into a throw-away database and compare)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/aak-agency/backup/restore-test.sh
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=30min

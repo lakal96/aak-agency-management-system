@@ -1,0 +1,11 @@
+[Unit]
+Description=AAK nightly backup (database + uploaded CBL bills) to S3
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/aak-agency/backup/aak-backup.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h

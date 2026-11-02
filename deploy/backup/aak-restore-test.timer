@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the AAK restore test every Sunday
+
+[Timer]
+# Sunday 03:30 Sri Lanka time, an hour after the nightly backup, when nobody is using the system.
+OnCalendar=Sun *-*-* 03:30:00 Asia/Colombo
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
