@@ -56,10 +56,12 @@ class EmployeeSalaryServiceTest {
         EmployeeAdvance advance1 = new EmployeeAdvance();
         advance1.setId(10L);
         advance1.setAmount(new BigDecimal("500"));
+        advance1.setAdvanceDate(LocalDate.of(2026, 9, 5));
 
         EmployeeAdvance advance2 = new EmployeeAdvance();
         advance2.setId(11L);
         advance2.setAmount(new BigDecimal("300"));
+        advance2.setAdvanceDate(LocalDate.of(2026, 9, 10));
 
         when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
         when(employeeAdvanceRepository.findByEmployeeIdAndSettledFalseOrderByAdvanceDateAsc(1L))
@@ -81,20 +83,63 @@ class EmployeeSalaryServiceTest {
     }
 
     @Test
-    void recordSalaryPayment_rejectsDeductionGreaterThanGrossSalary() {
+    void recordSalaryPayment_carriesOverAdvanceThatWouldExceedGrossSalary() {
 
         EmployeeSalaryService service = newService();
 
         EmployeeAdvance advance = new EmployeeAdvance();
         advance.setId(10L);
         advance.setAmount(new BigDecimal("50000"));
+        advance.setAdvanceDate(LocalDate.of(2026, 9, 5));
 
         when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
         when(employeeAdvanceRepository.findByEmployeeIdAndSettledFalseOrderByAdvanceDateAsc(1L))
                 .thenReturn(List.of(advance));
+        when(employeeSalaryPaymentRepository.save(any(EmployeeSalaryPayment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        EmployeeSalaryPayment payment = service.recordSalaryPayment(
+                1L, "2026-09", new BigDecimal("30000"), LocalDate.now(), null, List.of(10L)
+        );
+
+        assertThat(payment.getAdvanceDeduction()).isEqualByComparingTo("0");
+        assertThat(payment.getNetPaid()).isEqualByComparingTo("30000");
+        assertThat(advance.isSettled()).isFalse();
+        verify(employeeAdvanceRepository, never()).save(advance);
+    }
+
+    @Test
+    void recordSalaryPayment_ignoresAdvanceDatedAfterThePayPeriod() {
+
+        EmployeeSalaryService service = newService();
+
+        EmployeeAdvance advance = new EmployeeAdvance();
+        advance.setId(10L);
+        advance.setAmount(new BigDecimal("500"));
+        advance.setAdvanceDate(LocalDate.of(2026, 10, 2));
+
+        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
+        when(employeeAdvanceRepository.findByEmployeeIdAndSettledFalseOrderByAdvanceDateAsc(1L))
+                .thenReturn(List.of(advance));
+        when(employeeSalaryPaymentRepository.save(any(EmployeeSalaryPayment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        EmployeeSalaryPayment payment = service.recordSalaryPayment(
+                1L, "2026-09", new BigDecimal("30000"), LocalDate.now(), null, List.of(10L)
+        );
+
+        assertThat(payment.getAdvanceDeduction()).isEqualByComparingTo("0");
+        assertThat(advance.isSettled()).isFalse();
+    }
+
+    @Test
+    void recordSalaryPayment_rejectsNonPositiveGrossSalary() {
+
+        EmployeeSalaryService service = newService();
+        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
 
         assertThatThrownBy(() -> service.recordSalaryPayment(
-                1L, "2026-09", new BigDecimal("30000"), LocalDate.now(), null, List.of(10L)
+                1L, "2026-09", BigDecimal.ZERO, LocalDate.now(), null, List.of()
         )).isInstanceOf(IllegalArgumentException.class);
     }
 }
