@@ -21,6 +21,7 @@ public class SalesInvoiceResponse {
     private final LocalDate dueDate;
     private final String paymentStatus;
     private final String status;
+    private final String deliveryStatus;
     private final String notes;
 
     public SalesInvoiceResponse(SalesInvoice invoice) {
@@ -38,6 +39,7 @@ public class SalesInvoiceResponse {
         this.dueDate = invoice.getDueDate();
         this.paymentStatus = invoice.getPaymentStatus();
         this.status = invoice.getStatus();
+        this.deliveryStatus = invoice.getDeliveryStatus();
         this.notes = invoice.getNotes();
     }
 
@@ -91,6 +93,11 @@ public class SalesInvoiceResponse {
 
     public String getPaymentStatus() {
         return paymentStatus;
+    }
+
+    // PENDING / COMPLETED / PARTIAL / UNSUCCESSFUL once the bill is on a delivery trip.
+    public String getDeliveryStatus() {
+        return deliveryStatus;
     }
 
     public String getStatus() {
