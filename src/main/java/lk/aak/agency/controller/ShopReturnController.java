@@ -5,6 +5,7 @@ import lk.aak.agency.model.ShopReturn;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.service.CustomerService;
 import lk.aak.agency.service.ShopReturnService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -48,7 +49,7 @@ public class ShopReturnController {
     public String showNewForm(Model model) {
 
         ShopReturn shopReturn = new ShopReturn();
-        shopReturn.setReturnDate(LocalDate.now());
+        shopReturn.setReturnDate(BusinessTime.today());
 
         model.addAttribute("shopReturn", shopReturn);
         model.addAttribute("customers", customerService.getAllCustomers());

@@ -2,6 +2,7 @@ package lk.aak.agency.repository;
 
 import lk.aak.agency.model.Customer;
 import lk.aak.agency.model.SalesInvoice;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,7 +31,7 @@ class SalesInvoiceRepositoryTest {
         SalesInvoice invoice = new SalesInvoice();
         invoice.setInvoiceNumber(invoiceNumber);
         invoice.setCustomer(customer);
-        invoice.setInvoiceDate(LocalDate.now());
+        invoice.setInvoiceDate(BusinessTime.today());
         invoice.setSaleType("CREDIT");
         invoice.setStatus("DRAFT");
         invoice.setGrossAmount(BigDecimal.TEN);
@@ -133,5 +134,27 @@ class SalesInvoiceRepositoryTest {
         assertThat(scoped.getContent())
                 .extracting(SalesInvoice::getInvoiceNumber)
                 .containsExactly("INV-700");
+    }
+
+    @Test
+    void aBillSavedWithoutADateGetsSriLankasDateEvenWhenUtcIsStillYesterday() {
+
+        // 00:30 on 15 January 2030 in Colombo = 19:00 on 14 January in UTC (a date far from the real one, so the frozen clock is what is being tested).
+        BusinessTime.setClockForTesting(java.time.Clock.fixed(java.time.Instant.parse("2030-01-14T19:00:00Z"), java.time.ZoneOffset.UTC));
+        try {
+            SalesInvoice invoice = new SalesInvoice();
+            invoice.setInvoiceNumber("INV-NODATE");
+            invoice.setCustomer(saveCustomer("Night Owl Mart", "Colombo"));
+            invoice.setStatus("DRAFT");
+            invoice.setGrossAmount(BigDecimal.TEN);
+            invoice.setNetAmount(BigDecimal.TEN);
+
+            SalesInvoice saved = salesInvoiceRepository.saveAndFlush(invoice);
+
+            assertThat(saved.getInvoiceDate()).isEqualTo(LocalDate.of(2030, 1, 15));
+            assertThat(saved.getCreatedAt()).isEqualTo(java.time.LocalDateTime.of(2030, 1, 15, 0, 30));
+        } finally {
+            BusinessTime.resetClock();
+        }
     }
 }

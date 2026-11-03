@@ -71,7 +71,7 @@
             <input type="hidden" name="purchaseInvoiceId" th:value="${row.invoice().id}">
             <input type="number" name="amount" step="0.01" min="0.01"
                    th:max="${row.outstandingBalance()}" placeholder="Amount" required>
-            <input type="date" name="paymentDate" th:value="${T(java.time.LocalDate).now()}" required>
+            <input type="date" name="paymentDate" th:value="${T(lk.aak.agency.util.BusinessTime).today()}" required>
             <select name="paymentMethod">
               <option value="CASH">Cash</option>
               <option value="CHEQUE">Cheque</option>

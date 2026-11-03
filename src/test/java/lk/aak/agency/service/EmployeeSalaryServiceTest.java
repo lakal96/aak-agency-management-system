@@ -6,6 +6,7 @@ import lk.aak.agency.model.EmployeeSalaryPayment;
 import lk.aak.agency.repository.EmployeeAdvanceRepository;
 import lk.aak.agency.repository.EmployeeRepository;
 import lk.aak.agency.repository.EmployeeSalaryPaymentRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -70,7 +71,7 @@ class EmployeeSalaryServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         EmployeeSalaryPayment payment = service.recordSalaryPayment(
-                1L, "2026-09", new BigDecimal("30000"), LocalDate.now(), null, List.of(10L)
+                1L, "2026-09", new BigDecimal("30000"), BusinessTime.today(), null, List.of(10L)
         );
 
         assertThat(payment.getAdvanceDeduction()).isEqualByComparingTo("500");
@@ -99,7 +100,7 @@ class EmployeeSalaryServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         EmployeeSalaryPayment payment = service.recordSalaryPayment(
-                1L, "2026-09", new BigDecimal("30000"), LocalDate.now(), null, List.of(10L)
+                1L, "2026-09", new BigDecimal("30000"), BusinessTime.today(), null, List.of(10L)
         );
 
         assertThat(payment.getAdvanceDeduction()).isEqualByComparingTo("0");
@@ -125,7 +126,7 @@ class EmployeeSalaryServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         EmployeeSalaryPayment payment = service.recordSalaryPayment(
-                1L, "2026-09", new BigDecimal("30000"), LocalDate.now(), null, List.of(10L)
+                1L, "2026-09", new BigDecimal("30000"), BusinessTime.today(), null, List.of(10L)
         );
 
         assertThat(payment.getAdvanceDeduction()).isEqualByComparingTo("0");
@@ -139,7 +140,7 @@ class EmployeeSalaryServiceTest {
         when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
 
         assertThatThrownBy(() -> service.recordSalaryPayment(
-                1L, "2026-09", BigDecimal.ZERO, LocalDate.now(), null, List.of()
+                1L, "2026-09", BigDecimal.ZERO, BusinessTime.today(), null, List.of()
         )).isInstanceOf(IllegalArgumentException.class);
     }
 }

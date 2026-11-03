@@ -4,6 +4,7 @@ import lk.aak.agency.model.Product;
 import lk.aak.agency.model.StockAdjustment;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.service.StockAdjustmentService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -60,7 +61,7 @@ public class StockAdjustmentController {
                 new StockAdjustment();
 
         stockAdjustment.setAdjustmentDate(
-                LocalDateTime.now()
+                BusinessTime.now()
         );
 
         if ("OPENING_STOCK".equalsIgnoreCase(reason)) {

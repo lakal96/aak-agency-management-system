@@ -14,6 +14,7 @@ import lk.aak.agency.repository.SupplierReturnRepository;
 import lk.aak.agency.service.InventoryService;
 import lk.aak.agency.service.PaymentService;
 import lk.aak.agency.service.SupplierPaymentService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -75,7 +76,7 @@ public class ReportApiController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = BusinessTime.today();
         LocalDate resolvedFrom = fromDate != null ? fromDate : today.with(TemporalAdjusters.firstDayOfMonth());
         LocalDate resolvedTo = toDate != null ? toDate : today;
 

@@ -12,6 +12,7 @@ import lk.aak.agency.repository.StockMovementRepository;
 import lk.aak.agency.repository.SystemUserRepository;
 import lk.aak.agency.service.InventoryService;
 import lk.aak.agency.service.SalesRepScopeService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -259,7 +260,7 @@ public class HomeController {
         BigDecimal totalOverdueAmount =
                 BigDecimal.ZERO;
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = BusinessTime.today();
 
         for (SalesInvoice invoice : invoices) {
 

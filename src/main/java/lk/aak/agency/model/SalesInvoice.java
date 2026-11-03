@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -92,7 +93,7 @@ public class SalesInvoice {
     public void setDefaultValues() {
 
         if (invoiceDate == null) {
-            invoiceDate = LocalDate.now();
+            invoiceDate = BusinessTime.today();
         }
 
         if (grossAmount == null) {
@@ -124,7 +125,7 @@ public class SalesInvoice {
         }
 
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = BusinessTime.now();
         }
     }
 

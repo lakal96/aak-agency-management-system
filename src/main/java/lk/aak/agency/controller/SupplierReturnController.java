@@ -4,6 +4,7 @@ import lk.aak.agency.model.SupplierReturn;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.PurchaseInvoiceRepository;
 import lk.aak.agency.service.SupplierReturnService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -47,7 +48,7 @@ public class SupplierReturnController {
     public String showNewForm(Model model) {
 
         SupplierReturn supplierReturn = new SupplierReturn();
-        supplierReturn.setReturnDate(LocalDate.now());
+        supplierReturn.setReturnDate(BusinessTime.today());
 
         model.addAttribute("supplierReturn", supplierReturn);
         model.addAttribute(

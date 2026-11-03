@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -66,7 +67,7 @@ public class Employee {
         }
 
         if (joinDate == null) {
-            joinDate = LocalDate.now();
+            joinDate = BusinessTime.today();
         }
     }
 

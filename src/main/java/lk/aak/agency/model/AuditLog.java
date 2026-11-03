@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -40,7 +41,7 @@ public class AuditLog {
     @PrePersist
     public void setDefaultValues() {
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = BusinessTime.now();
         }
     }
 

@@ -19,6 +19,7 @@ import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.service.PurchaseInvoiceService;
 import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.SupplierPaymentService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -170,7 +171,7 @@ public class PurchaseInvoiceApiController {
         invoice.setInvoiceFileStoredName(storedFile.storedFileName());
         invoice.setInvoiceFileContentType(storedFile.contentType());
         invoice.setInvoiceFileSize(storedFile.fileSize());
-        invoice.setInvoiceFileUploadedAt(LocalDateTime.now());
+        invoice.setInvoiceFileUploadedAt(BusinessTime.now());
 
         PurchaseInvoice saved = purchaseInvoiceRepository.save(invoice);
 

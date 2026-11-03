@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -150,7 +151,7 @@ public class Payment {
     public void prePersist() {
 
         if (paymentDate == null) {
-            paymentDate = LocalDate.now();
+            paymentDate = BusinessTime.today();
         }
 
         if (amount == null) {
@@ -202,7 +203,7 @@ public class Payment {
         }
 
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = BusinessTime.now();
         }
 
         if (collectedByEmployeeId == null) {

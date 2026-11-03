@@ -1,6 +1,7 @@
 package lk.aak.agency.repository;
 
 import lk.aak.agency.model.PurchaseInvoice;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,7 +27,7 @@ class PurchaseInvoiceRepositoryTest {
         invoice.setDocumentNumber(documentNumber);
         invoice.setSupplierName(supplierName);
         invoice.setTerritory(territory);
-        invoice.setInvoiceDate(LocalDate.now());
+        invoice.setInvoiceDate(BusinessTime.today());
         invoice.setPlaceOfSupply("Colombo");
         invoice.setStatus("DRAFT");
 

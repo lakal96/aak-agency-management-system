@@ -2,6 +2,7 @@ package lk.aak.agency.security.jwt;
 
 import lk.aak.agency.model.RefreshToken;
 import lk.aak.agency.repository.RefreshTokenRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,7 +44,7 @@ public class RefreshTokenService {
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUsername(username);
         refreshToken.setTokenHash(hash(rawToken));
-        refreshToken.setExpiresAt(LocalDateTime.now().plusDays(refreshTokenDays));
+        refreshToken.setExpiresAt(BusinessTime.now().plusDays(refreshTokenDays));
 
         refreshTokenRepository.save(refreshToken);
 
@@ -66,7 +67,7 @@ public class RefreshTokenService {
 
         RefreshToken refreshToken = stored.get();
 
-        if (refreshToken.isRevoked() || refreshToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (refreshToken.isRevoked() || refreshToken.getExpiresAt().isBefore(BusinessTime.now())) {
             return Optional.empty();
         }
 

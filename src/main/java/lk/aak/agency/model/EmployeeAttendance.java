@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -59,7 +60,7 @@ public class EmployeeAttendance {
         }
 
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = BusinessTime.now();
         }
     }
 

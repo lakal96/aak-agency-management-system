@@ -6,6 +6,7 @@ import lk.aak.agency.model.StockMovement;
 import lk.aak.agency.repository.PurchaseInvoiceItemRepository;
 import lk.aak.agency.repository.PurchaseInvoiceRepository;
 import lk.aak.agency.repository.StockMovementRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -337,7 +338,7 @@ public class PurchaseInvoiceService {
         }
 
         invoice.setInvoiceVerified(true);
-        invoice.setInvoiceVerifiedAt(LocalDateTime.now());
+        invoice.setInvoiceVerifiedAt(BusinessTime.now());
         invoice.setStatus("COMPLETED");
 
         purchaseInvoiceRepository.save(invoice);

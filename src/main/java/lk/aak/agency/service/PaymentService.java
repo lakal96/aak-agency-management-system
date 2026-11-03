@@ -5,6 +5,7 @@ import lk.aak.agency.model.SalesInvoice;
 import lk.aak.agency.repository.EmployeeRepository;
 import lk.aak.agency.repository.PaymentRepository;
 import lk.aak.agency.repository.SalesInvoiceRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -286,7 +287,7 @@ public class PaymentService {
 
         for (Payment payment : payments) {
             payment.setHandoverStatus("HANDED_OVER");
-            payment.setHandoverDate(LocalDate.now());
+            payment.setHandoverDate(BusinessTime.today());
             paymentRepository.save(payment);
         }
     }
@@ -378,7 +379,7 @@ public class PaymentService {
 
         LocalDate effectiveDate =
                 actionDate == null
-                        ? LocalDate.now()
+                        ? BusinessTime.today()
                         : actionDate;
 
         if ("DEPOSITED".equals(normalizedStatus)) {

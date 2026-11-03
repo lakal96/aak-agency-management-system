@@ -13,6 +13,7 @@ import lk.aak.agency.service.InventoryService;
 import lk.aak.agency.service.PaymentService;
 import lk.aak.agency.service.SalesRepScopeService;
 import lk.aak.agency.service.SupplierPaymentService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
@@ -71,7 +72,7 @@ public class DashboardApiController {
     @GetMapping("/summary")
     public DashboardSummaryResponse summary(Authentication authentication) {
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = BusinessTime.today();
         LocalDate monthStart = today.with(TemporalAdjusters.firstDayOfMonth());
 
         // A sales rep sees figures for the shops assigned to them only - never the whole agency.

@@ -6,6 +6,7 @@ import lk.aak.agency.model.StockMovement;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.PurchaseInvoiceItemRepository;
 import lk.aak.agency.repository.StockMovementRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
@@ -209,7 +210,7 @@ public class InventoryService {
      */
     public List<ExpiringProductRow> getExpiringSoonProducts() {
 
-        LocalDate alertCutoff = LocalDate.now().plusDays(30);
+        LocalDate alertCutoff = BusinessTime.today().plusDays(30);
 
         List<ExpiringProductRow> expiringProducts = new ArrayList<>();
 
@@ -253,7 +254,7 @@ public class InventoryService {
             BigDecimal currentStock) {
 
         public boolean isAlreadyExpired() {
-            return earliestExpiryDate.isBefore(LocalDate.now());
+            return earliestExpiryDate.isBefore(BusinessTime.today());
         }
     }
 

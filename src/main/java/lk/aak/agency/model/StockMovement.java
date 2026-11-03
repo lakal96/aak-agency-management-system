@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -70,7 +71,7 @@ public class StockMovement {
         }
 
         if (movementDate == null) {
-            movementDate = LocalDateTime.now();
+            movementDate = BusinessTime.now();
         }
     }
 

@@ -10,6 +10,7 @@ import lk.aak.agency.service.PaymentService;
 import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.SalesInvoiceService;
 import lk.aak.agency.service.SalesRepScopeService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
@@ -100,7 +101,7 @@ public class SalesInvoiceController {
                 new SalesInvoice();
 
         salesInvoice.setInvoiceDate(
-                LocalDate.now()
+                BusinessTime.today()
         );
 
         salesInvoice.setSaleType("CREDIT");

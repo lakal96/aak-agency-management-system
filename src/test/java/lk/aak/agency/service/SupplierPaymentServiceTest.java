@@ -4,6 +4,7 @@ import lk.aak.agency.model.PurchaseInvoice;
 import lk.aak.agency.model.SupplierPayment;
 import lk.aak.agency.repository.PurchaseInvoiceRepository;
 import lk.aak.agency.repository.SupplierPaymentRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -79,7 +80,7 @@ class SupplierPaymentServiceTest {
         SupplierPayment payment = new SupplierPayment();
         payment.setPurchaseInvoiceId(1L);
         payment.setAmount(new BigDecimal("1500"));
-        payment.setPaymentDate(LocalDate.now());
+        payment.setPaymentDate(BusinessTime.today());
 
         assertThatThrownBy(() -> service.recordPayment(payment))
                 .isInstanceOf(IllegalArgumentException.class)

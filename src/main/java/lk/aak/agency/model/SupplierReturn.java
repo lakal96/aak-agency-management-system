@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -51,7 +52,7 @@ public class SupplierReturn {
     public void setDefaultValues() {
 
         if (returnDate == null) {
-            returnDate = LocalDate.now();
+            returnDate = BusinessTime.today();
         }
 
         if (status == null || status.isBlank()) {
@@ -59,7 +60,7 @@ public class SupplierReturn {
         }
 
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = BusinessTime.now();
         }
     }
 
