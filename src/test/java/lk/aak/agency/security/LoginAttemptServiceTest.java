@@ -2,6 +2,7 @@ package lk.aak.agency.security;
 
 import lk.aak.agency.model.SystemUser;
 import lk.aak.agency.repository.SystemUserRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -41,7 +42,7 @@ class LoginAttemptServiceTest {
 
         assertThat(user.getFailedAttemptCount()).isEqualTo(5);
         assertThat(user.getLockedUntil()).isNotNull();
-        assertThat(user.getLockedUntil()).isAfter(LocalDateTime.now());
+        assertThat(user.getLockedUntil()).isAfter(BusinessTime.now());
     }
 
     @Test
@@ -62,7 +63,7 @@ class LoginAttemptServiceTest {
     void isLocked_returnsTrue_whileLockIsStillActive() {
 
         LoginAttemptService service = new LoginAttemptService(systemUserRepository);
-        SystemUser user = userWithAttempts(5, LocalDateTime.now().plusMinutes(10));
+        SystemUser user = userWithAttempts(5, BusinessTime.now().plusMinutes(10));
 
         when(systemUserRepository.findByUsername("sales1")).thenReturn(Optional.of(user));
 
@@ -73,7 +74,7 @@ class LoginAttemptServiceTest {
     void isLocked_resetsAndReturnsFalse_onceLockHasExpired() {
 
         LoginAttemptService service = new LoginAttemptService(systemUserRepository);
-        SystemUser user = userWithAttempts(5, LocalDateTime.now().minusMinutes(1));
+        SystemUser user = userWithAttempts(5, BusinessTime.now().minusMinutes(1));
 
         when(systemUserRepository.findByUsername("sales1")).thenReturn(Optional.of(user));
 
@@ -86,7 +87,7 @@ class LoginAttemptServiceTest {
     void recordSuccess_clearsFailedAttemptsAndLock() {
 
         LoginAttemptService service = new LoginAttemptService(systemUserRepository);
-        SystemUser user = userWithAttempts(5, LocalDateTime.now().plusMinutes(10));
+        SystemUser user = userWithAttempts(5, BusinessTime.now().plusMinutes(10));
 
         when(systemUserRepository.findByUsername("sales1")).thenReturn(Optional.of(user));
 

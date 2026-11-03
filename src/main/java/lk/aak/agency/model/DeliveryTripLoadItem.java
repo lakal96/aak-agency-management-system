@@ -1,5 +1,6 @@
 package lk.aak.agency.model;
 
+import lk.aak.agency.util.BusinessTime;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -46,7 +47,7 @@ public class DeliveryTripLoadItem {
     @PrePersist
     public void setDefaultValues() {
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = BusinessTime.now();
         }
     }
 

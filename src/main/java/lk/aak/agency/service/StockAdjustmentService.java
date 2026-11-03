@@ -6,6 +6,7 @@ import lk.aak.agency.model.StockMovement;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.StockAdjustmentRepository;
 import lk.aak.agency.repository.StockMovementRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -168,7 +169,7 @@ public class StockAdjustmentService {
         if (adjustment.getAdjustmentDate() == null) {
 
             adjustment.setAdjustmentDate(
-                    LocalDateTime.now()
+                    BusinessTime.now()
             );
         }
 

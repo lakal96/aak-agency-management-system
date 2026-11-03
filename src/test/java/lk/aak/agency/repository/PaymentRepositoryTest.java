@@ -3,6 +3,7 @@ package lk.aak.agency.repository;
 import lk.aak.agency.model.Customer;
 import lk.aak.agency.model.Payment;
 import lk.aak.agency.model.SalesInvoice;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,7 +36,7 @@ class PaymentRepositoryTest {
         Payment payment = new Payment();
         payment.setReceiptNumber(receiptNumber);
         payment.setSalesInvoice(invoice);
-        payment.setPaymentDate(LocalDate.now());
+        payment.setPaymentDate(BusinessTime.today());
         payment.setAmount(amount);
         payment.setPaymentMethod("CASH");
         payment.setStatus(status);
@@ -48,7 +49,7 @@ class PaymentRepositoryTest {
         SalesInvoice invoice = new SalesInvoice();
         invoice.setInvoiceNumber(invoiceNumber);
         invoice.setCustomer(customer);
-        invoice.setInvoiceDate(LocalDate.now());
+        invoice.setInvoiceDate(BusinessTime.today());
         invoice.setSaleType("CASH");
         invoice.setStatus("COMPLETED");
 

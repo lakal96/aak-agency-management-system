@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lk.aak.agency.dto.api.AttendanceMarkRequest;
 import lk.aak.agency.dto.api.AttendanceRowResponse;
 import lk.aak.agency.service.EmployeeAttendanceService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,7 +25,7 @@ public class AttendanceApiController {
     public List<AttendanceRowResponse> sheet(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
-        LocalDate selectedDate = date != null ? date : LocalDate.now();
+        LocalDate selectedDate = date != null ? date : BusinessTime.today();
 
         return attendanceService.getAttendanceSheetForDate(selectedDate).stream()
                 .map(AttendanceRowResponse::new)

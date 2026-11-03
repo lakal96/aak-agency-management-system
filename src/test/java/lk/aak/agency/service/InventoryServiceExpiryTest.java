@@ -5,6 +5,7 @@ import lk.aak.agency.model.PurchaseInvoiceItem;
 import lk.aak.agency.repository.ProductRepository;
 import lk.aak.agency.repository.PurchaseInvoiceItemRepository;
 import lk.aak.agency.repository.StockMovementRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -57,10 +58,10 @@ class InventoryServiceExpiryTest {
         when(stockMovementRepository.calculateCurrentStock(3L)).thenReturn(new BigDecimal("10"));
 
         PurchaseInvoiceItem nearBatch = new PurchaseInvoiceItem();
-        nearBatch.setExpiryDate(LocalDate.now().plusDays(5));
+        nearBatch.setExpiryDate(BusinessTime.today().plusDays(5));
 
         PurchaseInvoiceItem farBatch = new PurchaseInvoiceItem();
-        farBatch.setExpiryDate(LocalDate.now().plusDays(90));
+        farBatch.setExpiryDate(BusinessTime.today().plusDays(90));
 
         when(purchaseInvoiceItemRepository.findByProductIdAndExpiryDateIsNotNullOrderByExpiryDateAsc(1L))
                 .thenReturn(List.of(nearBatch));

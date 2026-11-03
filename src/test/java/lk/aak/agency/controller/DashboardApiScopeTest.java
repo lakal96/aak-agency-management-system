@@ -13,6 +13,7 @@ import lk.aak.agency.service.InventoryService;
 import lk.aak.agency.service.PaymentService;
 import lk.aak.agency.service.SalesRepScopeService;
 import lk.aak.agency.service.SupplierPaymentService;
+import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -102,7 +103,7 @@ class DashboardApiScopeTest {
         invoice.setCustomer(customer);
         invoice.setStatus("COMPLETED");
         invoice.setPaymentStatus("UNPAID");
-        invoice.setInvoiceDate(LocalDate.now());
+        invoice.setInvoiceDate(BusinessTime.today());
         invoice.setNetAmount(new BigDecimal(net));
         return invoice;
     }

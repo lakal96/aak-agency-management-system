@@ -5,6 +5,7 @@ import lk.aak.agency.model.SalesInvoice;
 import lk.aak.agency.repository.SalesInvoiceRepository;
 import lk.aak.agency.service.EmployeeService;
 import lk.aak.agency.service.PaymentService;
+import lk.aak.agency.util.BusinessTime;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -93,7 +94,7 @@ public class PaymentController {
 
         Payment payment = new Payment();
 
-        payment.setPaymentDate(LocalDate.now());
+        payment.setPaymentDate(BusinessTime.today());
         payment.setPaymentMethod("CASH");
         payment.setStatus("RECEIVED");
 
@@ -298,7 +299,7 @@ public class PaymentController {
 
             model.addAttribute(
                     "today",
-                    LocalDate.now()
+                    BusinessTime.today()
             );
 
             return "payments/payment-receipt";

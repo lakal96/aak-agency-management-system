@@ -2,6 +2,7 @@ package lk.aak.agency.security;
 
 import lk.aak.agency.model.SystemUser;
 import lk.aak.agency.repository.SystemUserRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +36,7 @@ public class LoginAttemptService {
             user.setFailedAttemptCount(failures);
 
             if (failures >= MAX_ATTEMPTS) {
-                user.setLockedUntil(LocalDateTime.now().plus(LOCK_DURATION));
+                user.setLockedUntil(BusinessTime.now().plus(LOCK_DURATION));
             }
 
             systemUserRepository.save(user);
@@ -66,7 +67,7 @@ public class LoginAttemptService {
                         return false;
                     }
 
-                    if (LocalDateTime.now().isAfter(lockedUntil)) {
+                    if (BusinessTime.now().isAfter(lockedUntil)) {
                         // Lock has expired - reset so the user can try again.
                         user.setFailedAttemptCount(0);
                         user.setLockedUntil(null);

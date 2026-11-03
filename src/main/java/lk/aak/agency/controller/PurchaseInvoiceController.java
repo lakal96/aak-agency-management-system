@@ -9,6 +9,7 @@ import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.service.PurchaseInvoiceService;
 import lk.aak.agency.service.SupplierPaymentService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
@@ -91,7 +92,7 @@ public class PurchaseInvoiceController {
         PurchaseInvoice purchaseInvoice =
                 new PurchaseInvoice();
 
-        purchaseInvoice.setInvoiceDate(LocalDate.now());
+        purchaseInvoice.setInvoiceDate(BusinessTime.today());
 
         purchaseInvoice.setSupplierName(
                 "CBL Foods International (Pvt) Ltd"
@@ -246,7 +247,7 @@ public class PurchaseInvoiceController {
                 );
 
                 purchaseInvoice.setInvoiceFileUploadedAt(
-                        LocalDateTime.now()
+                        BusinessTime.now()
                 );
             }
 

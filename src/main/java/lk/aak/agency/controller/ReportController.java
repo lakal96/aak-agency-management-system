@@ -16,6 +16,7 @@ import lk.aak.agency.service.EmployeeSalaryService;
 import lk.aak.agency.service.ShopReturnService;
 import lk.aak.agency.service.SupplierPaymentService;
 import lk.aak.agency.service.SupplierReturnService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Controller;
@@ -277,7 +278,7 @@ public class ReportController {
 
         model.addAttribute(
                 "reportGeneratedAt",
-                LocalDateTime.now()
+                BusinessTime.now()
         );
 
         model.addAttribute(

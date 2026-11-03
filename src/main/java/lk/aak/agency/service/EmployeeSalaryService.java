@@ -6,6 +6,7 @@ import lk.aak.agency.model.EmployeeSalaryPayment;
 import lk.aak.agency.repository.EmployeeAdvanceRepository;
 import lk.aak.agency.repository.EmployeeRepository;
 import lk.aak.agency.repository.EmployeeSalaryPaymentRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -107,7 +108,7 @@ public class EmployeeSalaryService {
         payment.setGrossSalary(grossSalary);
         payment.setAdvanceDeduction(advanceDeduction);
         payment.setNetPaid(grossSalary.subtract(advanceDeduction));
-        payment.setPaymentDate(paymentDate != null ? paymentDate : LocalDate.now());
+        payment.setPaymentDate(paymentDate != null ? paymentDate : BusinessTime.today());
         payment.setNotes(notes);
 
         EmployeeSalaryPayment savedPayment = employeeSalaryPaymentRepository.save(payment);

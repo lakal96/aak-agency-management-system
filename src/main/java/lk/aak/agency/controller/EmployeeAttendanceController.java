@@ -1,6 +1,7 @@
 package lk.aak.agency.controller;
 
 import lk.aak.agency.service.EmployeeAttendanceService;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -30,7 +31,7 @@ public class EmployeeAttendanceController {
 
             Model model) {
 
-        LocalDate selectedDate = date != null ? date : LocalDate.now();
+        LocalDate selectedDate = date != null ? date : BusinessTime.today();
 
         model.addAttribute("selectedDate", selectedDate);
         model.addAttribute("rows", employeeAttendanceService.getAttendanceSheetForDate(selectedDate));

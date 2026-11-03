@@ -8,6 +8,7 @@ import lk.aak.agency.repository.SalesInvoiceItemRepository;
 import lk.aak.agency.repository.SalesInvoiceRepository;
 import lk.aak.agency.repository.StockMovementRepository;
 import lk.aak.agency.repository.PaymentRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -577,7 +578,7 @@ public class SalesInvoiceService {
         if (overrideApprovedBy != null) {
             invoice.setCreditOverrideApprovedBy(overrideApprovedBy);
             invoice.setCreditOverrideReason(overrideReason);
-            invoice.setCreditOverrideAt(java.time.LocalDateTime.now());
+            invoice.setCreditOverrideAt(BusinessTime.now());
         }
 
         if ("CASH".equalsIgnoreCase(

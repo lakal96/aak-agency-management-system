@@ -4,6 +4,7 @@ import lk.aak.agency.model.Employee;
 import lk.aak.agency.model.EmployeeAdvance;
 import lk.aak.agency.repository.EmployeeAdvanceRepository;
 import lk.aak.agency.repository.EmployeeRepository;
+import lk.aak.agency.util.BusinessTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,7 +58,7 @@ public class EmployeeAdvanceService {
         advance.setEmployeeId(employeeId);
         advance.setEmployeeName(employee.getFullName());
         advance.setAmount(amount);
-        advance.setAdvanceDate(advanceDate != null ? advanceDate : LocalDate.now());
+        advance.setAdvanceDate(advanceDate != null ? advanceDate : BusinessTime.today());
         advance.setNotes(notes);
 
         return employeeAdvanceRepository.save(advance);
