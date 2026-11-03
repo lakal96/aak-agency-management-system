@@ -81,8 +81,41 @@ public interface SalesInvoiceRepository
      */
     List<SalesInvoice> findByDeliveryTripIdOrderByIdAsc(Long deliveryTripId);
 
-    @Query("SELECT COALESCE(SUM(i.netAmount), 0) FROM SalesInvoice i WHERE i.invoiceDate BETWEEN :from AND :to")
+    @Query("SELECT COALESCE(SUM(i.netAmount), 0) FROM SalesInvoice i WHERE i.status = 'COMPLETED' AND i.invoiceDate BETWEEN :from AND :to")
     BigDecimal sumNetAmountBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    /*
+     * Dashboard building blocks. Only COMPLETED bills count as sales (drafts are not). employeeId scopes the
+     * result to one rep's shops - pass null for the whole agency (ADMIN/OFFICE).
+     */
+    @Query("""
+            SELECT i.invoiceDate, COUNT(i), COALESCE(SUM(i.netAmount), 0)
+            FROM SalesInvoice i LEFT JOIN i.customer c
+            WHERE i.status = 'COMPLETED' AND i.invoiceDate BETWEEN :from AND :to
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+            GROUP BY i.invoiceDate
+            """)
+    List<Object[]> completedTotalsByDay(
+            @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("employeeId") Long employeeId);
+
+    @Query("""
+            SELECT DISTINCT i.invoiceDate, c.id
+            FROM SalesInvoice i JOIN i.customer c
+            WHERE i.status = 'COMPLETED' AND i.invoiceDate BETWEEN :from AND :to
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+            """)
+    List<Object[]> buyingCustomersByDay(
+            @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("employeeId") Long employeeId);
+
+    /* Bills on trips dated :day, as (bill delivery status, trip status, count). */
+    @Query("""
+            SELECT i.deliveryStatus, t.status, COUNT(i)
+            FROM SalesInvoice i JOIN DeliveryTrip t ON t.id = i.deliveryTripId LEFT JOIN i.customer c
+            WHERE t.tripDate = :day
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+            GROUP BY i.deliveryStatus, t.status
+            """)
+    List<Object[]> deliveryCountsForDay(@Param("day") LocalDate day, @Param("employeeId") Long employeeId);
 
     long countByPaymentStatusIn(List<String> paymentStatuses);
 
