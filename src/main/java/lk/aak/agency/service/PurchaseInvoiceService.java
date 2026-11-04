@@ -404,6 +404,8 @@ public class PurchaseInvoiceService {
             );
         }
 
+        validateAmounts(purchaseInvoice);
+
         if (purchaseInvoice.getId() != null) {
             PurchaseInvoice existingInvoice =
                     getInvoiceById(purchaseInvoice.getId());
@@ -432,6 +434,21 @@ public class PurchaseInvoiceService {
             throw new IllegalArgumentException(
                     "Document number already exists."
             );
+        }
+    }
+
+    /** Discount and VAT must be sensible numbers (the API request already checks; this covers the old form). */
+    private void validateAmounts(PurchaseInvoice purchaseInvoice) {
+
+        for (BigDecimal amount : new BigDecimal[]{
+                purchaseInvoice.getDiscountAmount(), purchaseInvoice.getVatAmount()}) {
+
+            if (amount != null && amount.signum() < 0) {
+                throw new IllegalArgumentException("Discount and VAT cannot be negative.");
+            }
+            if (amount != null && amount.compareTo(new BigDecimal("999999999.99")) > 0) {
+                throw new IllegalArgumentException("Discount or VAT is too large - please check the number.");
+            }
         }
     }
 

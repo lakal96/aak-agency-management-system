@@ -1,9 +1,13 @@
 package lk.aak.agency.dto.api;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+
+import lk.aak.agency.util.Decimals;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,7 +34,12 @@ public class PurchaseInvoiceCreateRequest {
     @NotBlank(message = "Place of supply is required.")
     private String placeOfSupply;
 
+    @DecimalMin(value = "0", message = "Discount cannot be negative.")
+    @DecimalMax(value = "999999999.99", message = "Discount is too large - please check the number.")
     private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    @DecimalMin(value = "0", message = "VAT cannot be negative.")
+    @DecimalMax(value = "999999999.99", message = "VAT is too large - please check the number.")
     private BigDecimal vatAmount = BigDecimal.ZERO;
     private String paymentMethod;
     private String notes;
@@ -108,7 +117,7 @@ public class PurchaseInvoiceCreateRequest {
     }
 
     public void setDiscountAmount(BigDecimal discountAmount) {
-        this.discountAmount = discountAmount;
+        this.discountAmount = Decimals.round2(discountAmount);
     }
 
     public BigDecimal getVatAmount() {
@@ -116,7 +125,7 @@ public class PurchaseInvoiceCreateRequest {
     }
 
     public void setVatAmount(BigDecimal vatAmount) {
-        this.vatAmount = vatAmount;
+        this.vatAmount = Decimals.round2(vatAmount);
     }
 
     public String getPaymentMethod() {

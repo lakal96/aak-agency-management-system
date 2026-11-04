@@ -1,8 +1,10 @@
 package lk.aak.agency.dto.api;
 
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
@@ -18,9 +20,12 @@ public class StockAdjustmentRequest {
 
     @NotNull
     @DecimalMin(value = "0.01", message = "Adjustment quantity must be greater than zero.")
+    @DecimalMax(value = "999999.99", message = "Adjustment quantity is too large - please check the number.")
     private BigDecimal quantity;
 
     private String referenceNumber;
+    @NotBlank(message = "Please write a short note saying why the stock is changing.")
+    @Size(max = 1000, message = "The note is too long (the most allowed is 1000 characters).")
     private String notes;
 
     public Long getProductId() {
