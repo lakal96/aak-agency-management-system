@@ -166,7 +166,7 @@ class MoneyReportingIntegrationTest {
                 .containsExactlyInAnyOrder(unpaidCash.getId(), credit.getId());
         assertThat(history.getTotalOutstanding()).isEqualByComparingTo("700"); // 500 cash + 200 credit
 
-        CreditFollowUpResponse followUp = customerController.creditFollowUp();
+        CreditFollowUpResponse followUp = customerController.creditFollowUp(admin);
         assertThat(followUp.getTotalOutstanding()).isEqualByComparingTo("700");
     }
 
@@ -214,6 +214,7 @@ class MoneyReportingIntegrationTest {
 
         StockAdjustment adjustment = new StockAdjustment();
         adjustment.setAdjustmentType("DAMAGED");
+        adjustment.setNotes("3 packets damaged in the store");
         adjustment.setQuantity(new BigDecimal("3"));
 
         stockAdjustmentService.saveAdjustment(adjustment, biscuit.getId(), "office1");

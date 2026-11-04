@@ -92,7 +92,7 @@ class StockAdjustmentServiceTest {
 
     private StockAdjustmentService service() {
         return new StockAdjustmentService(
-                stockAdjustmentRepository, stockMovementRepository, productRepository, inventoryService, rowLockService
+                stockAdjustmentRepository, stockMovementRepository, productRepository, inventoryService, rowLockService, auditLogService
         );
     }
 
