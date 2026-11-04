@@ -231,6 +231,20 @@ class ApiAccessAndSessionsTest {
     }
 
     @Test
+    void aRepWhoseLoginIsNotLinkedToAnEmployeeCannotAddShops() throws Exception {
+        SystemUser rep = newUser("SALES_REP");
+        long shopsBefore = customerRepository.count();
+
+        mockMvc.perform(as(post("/api/v1/customers"), rep).contentType(MediaType.APPLICATION_JSON)
+                        .content(json("customerName", "Orphan Shop", "customerType", "RETAIL", "status", "ACTIVE",
+                                "creditLimit", "1000")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("not linked to an employee")));
+
+        org.assertj.core.api.Assertions.assertThat(customerRepository.count()).isEqualTo(shopsBefore);
+    }
+
+    @Test
     void twoEmployeesCannotShareOneLogin_evenWithDifferentCase() throws Exception {
         SystemUser admin = newUser("ADMIN");
         String login = uniq("rep");
