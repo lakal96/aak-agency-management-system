@@ -15,6 +15,7 @@ import lk.aak.agency.util.BusinessTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Request validation for purchase invoices, supplier payments and stock adjustments. */
 @SpringBootTest
+@Transactional   // roll back, so the shared in-memory database stays clean for other tests
 class PurchaseValidationTest {
 
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();

@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -31,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Trip rules against the real services and an H2 database (the walkthrough flow plus every refusal). */
 @SpringBootTest
+@Transactional   // roll back, so the shared in-memory database stays clean for other tests
 class DeliveryTripRulesTest {
 
     private static final AtomicInteger SEQ = new AtomicInteger();
