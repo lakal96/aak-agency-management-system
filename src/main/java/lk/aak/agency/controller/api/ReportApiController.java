@@ -100,7 +100,13 @@ public class ReportApiController {
                 .map(invoice -> zeroIfNull(invoice.getTotalAmount()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal totalPayments = payments.stream()
+        // Collected money: not credit notes (shop-return credits), not bounced cheques, and a cheque only once cleared.
+        List<Payment> collectedPayments = payments.stream()
+                .filter(payment -> !PaymentService.CREDIT_NOTE.equalsIgnoreCase(payment.getPaymentMethod()))
+                .filter(payment -> "RECEIVED".equalsIgnoreCase(payment.getStatus()))
+                .toList();
+
+        BigDecimal totalPayments = collectedPayments.stream()
                 .filter(payment -> !"CHEQUE".equalsIgnoreCase(payment.getPaymentMethod()) || "CLEARED".equalsIgnoreCase(payment.getChequeStatus()))
                 .map(payment -> zeroIfNull(payment.getAmount()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -111,13 +117,16 @@ public class ReportApiController {
                 .map(invoice -> zeroIfNull(invoice.getNetAmount()).subtract(paymentService.getPaidAmount(invoice.getId())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // Only APPROVED returns happened: a pending or rejected return moved no stock and credited nobody.
         BigDecimal shopReturnsValue = shopReturnRepository.findAllByOrderByReturnDateDesc().stream()
+                .filter(shopReturn -> "APPROVED".equalsIgnoreCase(shopReturn.getStatus()))
                 .filter(shopReturn -> inRange(shopReturn.getReturnDate(), resolvedFrom, resolvedTo))
                 .flatMap(shopReturn -> shopReturnItemRepository.findByShopReturnIdOrderByIdAsc(shopReturn.getId()).stream())
                 .map(item -> zeroIfNull(item.getAmount()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal supplierReturnsValue = supplierReturnRepository.findAllByOrderByReturnDateDesc().stream()
+                .filter(supplierReturn -> "APPROVED".equalsIgnoreCase(supplierReturn.getStatus()))
                 .filter(supplierReturn -> inRange(supplierReturn.getReturnDate(), resolvedFrom, resolvedTo))
                 .flatMap(supplierReturn -> supplierReturnItemRepository.findBySupplierReturnIdOrderByIdAsc(supplierReturn.getId()).stream())
                 .map(item -> zeroIfNull(item.getAmount()))
@@ -135,7 +144,7 @@ public class ReportApiController {
                 supplierReturnsValue,
                 salesInvoices.stream().filter(i -> "COMPLETED".equalsIgnoreCase(i.getStatus())).count(),
                 purchaseInvoices.stream().filter(i -> "COMPLETED".equalsIgnoreCase(i.getStatus())).count(),
-                payments.size(),
+                collectedPayments.size(),
                 inventoryService.getLowStockProducts().size(),
                 inventoryService.getOutOfStockProducts().size()
         );

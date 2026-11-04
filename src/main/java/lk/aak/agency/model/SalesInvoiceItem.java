@@ -87,7 +87,13 @@ public class SalesInvoiceItem {
             unit = product.getUnit();
         }
 
-        amount = quantity.multiply(unitPrice);
+        /*
+         * The database stores quantity, unit price and amount to 2 decimals. Round here, the same
+         * way (half-up), so the total shown on a draft is exactly the total stored and completed.
+         */
+        quantity = quantity.setScale(2, java.math.RoundingMode.HALF_UP);
+        unitPrice = unitPrice.setScale(2, java.math.RoundingMode.HALF_UP);
+        amount = quantity.multiply(unitPrice).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     public Long getId() {

@@ -1,5 +1,6 @@
 package lk.aak.agency.service;
 
+import lk.aak.agency.model.Customer;
 import lk.aak.agency.model.Product;
 import lk.aak.agency.model.SalesInvoice;
 import lk.aak.agency.model.SalesInvoiceItem;
@@ -17,6 +18,8 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,12 +144,21 @@ public class SalesInvoiceService {
         );
     }
 
-    @Transactional
+    /*
+     * READ_COMMITTED + a row lock on the bill: an edit and a "complete" for the same bill can no
+     * longer interleave (the edit used to re-save a stale DRAFT status over a completed bill).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public SalesInvoice saveInvoiceWithItems(
             SalesInvoice salesInvoice,
             List<SalesInvoiceItem> items) {
 
-        validateInvoice(salesInvoice);
+        if (salesInvoice == null) {
+
+            throw new IllegalArgumentException(
+                    "Sales invoice information is required."
+            );
+        }
 
         if (items == null || items.isEmpty()) {
 
@@ -159,10 +171,14 @@ public class SalesInvoiceService {
 
         if (salesInvoice.getId() != null) {
 
+            Long invoiceId = salesInvoice.getId();
+
+            // Lock FIRST, then read the bill as it is now: the copy the caller holds may be stale.
+            rowLockService.forget(salesInvoice);
+            rowLockService.lockSalesInvoice(invoiceId);
+
             existingInvoice =
-                    getInvoiceById(
-                            salesInvoice.getId()
-                    );
+                    getInvoiceById(invoiceId);
 
             if ("COMPLETED".equalsIgnoreCase(
                     existingInvoice.getStatus())) {
@@ -172,18 +188,23 @@ public class SalesInvoiceService {
                 );
             }
 
-            salesInvoice.setStatus(
-                    existingInvoice.getStatus()
-            );
+            // Check what was typed BEFORE touching the stored bill (a duplicate number must give
+            // the friendly message, not a database error).
+            validateInvoice(salesInvoice);
 
-            salesInvoice.setPaymentStatus(
-                    existingInvoice.getPaymentStatus()
-            );
+            if (existingInvoice != salesInvoice) {
+                copyEditableFields(salesInvoice, existingInvoice);
+            }
+
+            // Status and payment status always stay as the database has them.
+            salesInvoice = existingInvoice;
 
         } else {
 
             salesInvoice.setStatus("DRAFT");
             salesInvoice.setPaymentStatus("UNPAID");
+
+            validateInvoice(salesInvoice);
         }
 
         BigDecimal grossAmount =
@@ -192,6 +213,7 @@ public class SalesInvoiceService {
         for (SalesInvoiceItem item : items) {
 
             validateItem(item);
+            requireBillableProduct(item.getProduct());
 
             item.setUnit(
                     item.getProduct().getUnit()
@@ -269,7 +291,7 @@ public class SalesInvoiceService {
         return savedInvoice;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public SalesInvoiceItem saveItem(
             SalesInvoiceItem item) {
 
@@ -291,8 +313,10 @@ public class SalesInvoiceService {
             );
         }
 
+        rowLockService.lockSalesInvoice(invoice.getId());
+
         if ("COMPLETED".equalsIgnoreCase(
-                invoice.getStatus())) {
+                getInvoiceById(invoice.getId()).getStatus())) {
 
             throw new IllegalArgumentException(
                     "Products cannot be added to a completed invoice."
@@ -300,6 +324,7 @@ public class SalesInvoiceService {
         }
 
         validateItem(item);
+        requireBillableProduct(item.getProduct());
 
         item.setUnit(
                 item.getProduct().getUnit()
@@ -319,7 +344,7 @@ public class SalesInvoiceService {
         return savedItem;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteItem(Long itemId) {
 
         SalesInvoiceItem item =
@@ -331,8 +356,13 @@ public class SalesInvoiceService {
                                 )
                         );
 
+        Long invoiceId =
+                item.getSalesInvoice().getId();
+
+        rowLockService.lockSalesInvoice(invoiceId);
+
         SalesInvoice invoice =
-                item.getSalesInvoice();
+                getInvoiceById(invoiceId);
 
         if ("COMPLETED".equalsIgnoreCase(
                 invoice.getStatus())) {
@@ -341,9 +371,6 @@ public class SalesInvoiceService {
                     "Products cannot be removed from a completed invoice."
             );
         }
-
-        Long invoiceId =
-                invoice.getId();
 
         salesInvoiceItemRepository
                 .deleteById(itemId);
@@ -362,27 +389,63 @@ public class SalesInvoiceService {
 
     /**
      * Owner-approved credit exception: completes a credit sale even though it would exceed
-     * the customer's credit limit, recording who approved it and why. Every other check
-     * (stock availability, item validation) still applies as normal.
+     * the customer's credit limit. The approver recorded on the bill is always the logged-in
+     * admin (taken from the login, never typed); the name typed in the form is kept only as an
+     * extra note inside the reason. Every other check (stock availability, item validation)
+     * still applies as normal.
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void completeInvoiceWithCreditOverride(
-            Long invoiceId, String overrideApprovedBy, String overrideReason) {
-
-        if (overrideApprovedBy == null || overrideApprovedBy.isBlank()) {
-            throw new IllegalArgumentException("Approver name is required for a credit override.");
-        }
+            Long invoiceId, String approverNote, String overrideReason) {
 
         if (overrideReason == null || overrideReason.isBlank()) {
             throw new IllegalArgumentException("A reason is required to override the credit limit.");
         }
 
-        completeInvoiceInternal(invoiceId, overrideApprovedBy.trim(), overrideReason.trim());
+        String note = approverNote == null ? "" : approverNote.trim();
+        String loggedInAdmin = currentUsername();
+
+        // Without a login (never the case through the API) fall back to the typed name.
+        if (loggedInAdmin == null) {
+            if (note.isEmpty()) {
+                throw new IllegalArgumentException("Approver name is required for a credit override.");
+            }
+            loggedInAdmin = note;
+        }
+
+        String reason = overrideReason.trim();
+
+        if (!note.isEmpty() && !note.equalsIgnoreCase(loggedInAdmin)) {
+            reason = reason + " (approver named on the form: " + note + ")";
+        }
+
+        if (reason.length() > 500) {
+            reason = reason.substring(0, 500);
+        }
+
+        completeInvoiceInternal(invoiceId, loggedInAdmin, reason);
 
         auditLogService.record(
                 "CREDIT_LIMIT_OVERRIDE", "SalesInvoice", invoiceId,
-                "Approved by " + overrideApprovedBy.trim() + ": " + overrideReason.trim()
+                "Approved by " + loggedInAdmin + ": " + reason
         );
+    }
+
+    private String currentUsername() {
+
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication.getName() == null
+                || authentication.getName().isBlank()
+                || "anonymousUser".equals(authentication.getName())) {
+
+            return null;
+        }
+
+        return authentication.getName();
     }
 
     private void completeInvoiceInternal(
@@ -426,6 +489,9 @@ public class SalesInvoiceService {
         if (invoice.getCustomer() != null) {
             rowLockService.lockCustomer(invoice.getCustomer().getId());
         }
+
+        requireBillableShop(invoice.getCustomer());
+        items.forEach(item -> requireBillableProduct(item.getProduct()));
 
         recalculateInvoiceTotals(invoiceId);
 
@@ -581,17 +647,23 @@ public class SalesInvoiceService {
             invoice.setCreditOverrideAt(BusinessTime.now());
         }
 
-        if ("CASH".equalsIgnoreCase(
-                invoice.getSaleType())) {
-
-            invoice.setPaymentStatus("PAID");
+        /*
+         * A CASH bill completes as UNPAID exactly like a credit bill: the office records the cash
+         * it receives as a payment (with the collector) so it shows in Collections and the
+         * hand-over. It is a receivable until then, but it does not count against the credit limit.
+         */
+        if (invoice.getPaymentStatus() == null || invoice.getPaymentStatus().isBlank()) {
+            invoice.setPaymentStatus("UNPAID");
         }
 
         salesInvoiceRepository.save(invoice);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteInvoice(Long invoiceId) {
+
+        // Lock first: a delete racing a "complete" must see the final status, not a stale one.
+        rowLockService.lockSalesInvoice(invoiceId);
 
         SalesInvoice invoice =
                 getInvoiceById(invoiceId);
@@ -717,11 +789,105 @@ public class SalesInvoiceService {
             );
         }
 
-        if (salesInvoice.getSaleType() == null
-                || salesInvoice.getSaleType().isBlank()) {
+        requireBillableShop(salesInvoice.getCustomer());
 
-            salesInvoice.setSaleType("CREDIT");
+        salesInvoice.setSaleType(
+                normaliseSaleType(salesInvoice.getSaleType())
+        );
+
+        applyDueDate(salesInvoice);
+    }
+
+    /** Blank means CREDIT (the long-standing default); anything other than CREDIT or CASH is refused. */
+    private String normaliseSaleType(String saleType) {
+
+        if (saleType == null || saleType.isBlank()) {
+            return "CREDIT";
         }
+
+        String normalised = saleType.trim().toUpperCase();
+
+        if (!"CREDIT".equals(normalised) && !"CASH".equals(normalised)) {
+
+            throw new IllegalArgumentException(
+                    "Sale type must be CREDIT or CASH."
+            );
+        }
+
+        return normalised;
+    }
+
+    private void requireBillableShop(Customer customer) {
+
+        if (customer != null
+                && "INACTIVE".equalsIgnoreCase(customer.getStatus())) {
+
+            throw new IllegalArgumentException(
+                    "The shop \"" + customer.getCustomerName()
+                            + "\" is inactive and cannot be billed. "
+                            + "Make the shop active first, or choose another shop."
+            );
+        }
+    }
+
+    private void requireBillableProduct(Product product) {
+
+        if (product != null
+                && "INACTIVE".equalsIgnoreCase(product.getStatus())) {
+
+            throw new IllegalArgumentException(
+                    "The product \"" + product.getDisplayName()
+                            + "\" is inactive and cannot be billed. "
+                            + "Remove it from the bill or make the product active first."
+            );
+        }
+    }
+
+    /**
+     * Due date: refused when before the invoice date. When none was given it defaults to the invoice
+     * date plus the shop's payment terms; a CASH bill is due on the invoice date itself (cash is
+     * expected on the day).
+     */
+    private void applyDueDate(SalesInvoice salesInvoice) {
+
+        LocalDate invoiceDate = salesInvoice.getInvoiceDate();
+
+        if (salesInvoice.getDueDate() != null) {
+
+            if (salesInvoice.getDueDate().isBefore(invoiceDate)) {
+
+                throw new IllegalArgumentException(
+                        "The due date cannot be before the invoice date."
+                );
+            }
+
+            return;
+        }
+
+        if ("CASH".equals(salesInvoice.getSaleType())) {
+
+            salesInvoice.setDueDate(invoiceDate);
+            return;
+        }
+
+        Integer terms = salesInvoice.getCustomer().getPaymentTermsDays();
+
+        salesInvoice.setDueDate(
+                invoiceDate.plusDays(terms == null ? 0 : Math.max(terms, 0))
+        );
+    }
+
+    private void copyEditableFields(SalesInvoice from, SalesInvoice to) {
+
+        to.setInvoiceNumber(from.getInvoiceNumber());
+        to.setCustomer(from.getCustomer());
+        to.setInvoiceDate(from.getInvoiceDate());
+        to.setDueDate(from.getDueDate());
+        to.setRouteCode(from.getRouteCode());
+        to.setSaleType(from.getSaleType());
+        to.setDiscountAmount(from.getDiscountAmount());
+        to.setReturnAmount(from.getReturnAmount());
+        to.setNotes(from.getNotes());
     }
 
     private void validateInvoiceNumber(
@@ -773,6 +939,15 @@ public class SalesInvoiceService {
             throw new IllegalArgumentException(
                     "Please select a product."
             );
+        }
+
+        // Quantities and prices are kept to 2 decimals (half-up), exactly as the database stores them.
+        if (item.getQuantity() != null) {
+            item.setQuantity(item.getQuantity().setScale(2, RoundingMode.HALF_UP));
+        }
+
+        if (item.getUnitPrice() != null) {
+            item.setUnitPrice(item.getUnitPrice().setScale(2, RoundingMode.HALF_UP));
         }
 
         if (item.getQuantity() == null

@@ -17,11 +17,14 @@ public class EmployeeAdvanceService {
 
     private final EmployeeAdvanceRepository employeeAdvanceRepository;
     private final EmployeeRepository employeeRepository;
+    private final AuditLogService auditLogService;
 
     public EmployeeAdvanceService(
             EmployeeAdvanceRepository employeeAdvanceRepository,
-            EmployeeRepository employeeRepository) {
+            EmployeeRepository employeeRepository,
+            AuditLogService auditLogService) {
 
+        this.auditLogService = auditLogService;
         this.employeeAdvanceRepository = employeeAdvanceRepository;
         this.employeeRepository = employeeRepository;
     }
@@ -57,11 +60,18 @@ public class EmployeeAdvanceService {
         EmployeeAdvance advance = new EmployeeAdvance();
         advance.setEmployeeId(employeeId);
         advance.setEmployeeName(employee.getFullName());
-        advance.setAmount(amount);
+        advance.setAmount(amount.setScale(2, java.math.RoundingMode.HALF_UP));
         advance.setAdvanceDate(advanceDate != null ? advanceDate : BusinessTime.today());
         advance.setNotes(notes);
 
-        return employeeAdvanceRepository.save(advance);
+        EmployeeAdvance saved = employeeAdvanceRepository.save(advance);
+
+        auditLogService.record(
+                "ADVANCE_GIVEN", "EmployeeAdvance", saved.getId(),
+                "Gave advance of Rs. " + saved.getAmount().toPlainString() + " to " + employee.getFullName()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -78,11 +88,22 @@ public class EmployeeAdvanceService {
             throw new IllegalArgumentException("Advance amount must be greater than zero.");
         }
 
-        advance.setAmount(amount);
+        BigDecimal previousAmount = advance.getAmount();
+
+        advance.setAmount(amount.setScale(2, java.math.RoundingMode.HALF_UP));
         advance.setAdvanceDate(advanceDate != null ? advanceDate : advance.getAdvanceDate());
         advance.setNotes(notes);
 
-        return employeeAdvanceRepository.save(advance);
+        EmployeeAdvance saved = employeeAdvanceRepository.save(advance);
+
+        auditLogService.record(
+                "ADVANCE_UPDATED", "EmployeeAdvance", saved.getId(),
+                "Changed advance of " + saved.getEmployeeName() + " from Rs. "
+                        + (previousAmount == null ? "?" : previousAmount.toPlainString())
+                        + " to Rs. " + saved.getAmount().toPlainString()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -96,6 +117,12 @@ public class EmployeeAdvanceService {
         }
 
         employeeAdvanceRepository.deleteById(id);
+
+        auditLogService.record(
+                "ADVANCE_DELETED", "EmployeeAdvance", id,
+                "Deleted advance of Rs. " + advance.getAmount().toPlainString() + " given to "
+                        + advance.getEmployeeName()
+        );
     }
 }
 

@@ -1,9 +1,11 @@
 package lk.aak.agency.repository;
 
 import lk.aak.agency.model.PurchaseInvoice;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -37,4 +39,9 @@ public interface PurchaseInvoiceRepository
             @Param("keyword") String keyword,
             Pageable pageable
     );
+
+    /** Row-locks one PurchaseInvoice (FOR UPDATE) so edit / complete / delete / file upload are serialised. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT x FROM PurchaseInvoice x WHERE x.id = :id")
+    Optional<PurchaseInvoice> lockById(@Param("id") Long id);
 }

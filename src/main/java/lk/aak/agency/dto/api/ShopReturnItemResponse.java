@@ -14,8 +14,10 @@ public class ShopReturnItemResponse {
     private final BigDecimal unitPrice;
     private final BigDecimal amount;
     private final String category;
+    private final String cblClaimStatus;
 
     public ShopReturnItemResponse(ShopReturnItem item) {
+        this.cblClaimStatus = item.getCblClaimStatus();
         this.id = item.getId();
         this.productId = item.getProduct() != null ? item.getProduct().getId() : null;
         this.productName = item.getProduct() != null ? item.getProduct().getProductName() : null;
@@ -56,5 +58,10 @@ public class ShopReturnItemResponse {
 
     public String getCategory() {
         return category;
+    }
+
+    /** FOR_CLAIM for approved damaged/expired goods still to be claimed from CBL; null otherwise. */
+    public String getCblClaimStatus() {
+        return cblClaimStatus;
     }
 }

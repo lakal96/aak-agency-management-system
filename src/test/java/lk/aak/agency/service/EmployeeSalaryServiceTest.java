@@ -35,10 +35,12 @@ class EmployeeSalaryServiceTest {
     private EmployeeAdvanceRepository employeeAdvanceRepository;
     @Mock
     private EmployeeRepository employeeRepository;
+    @Mock
+    private AuditLogService auditLogService;
 
     private EmployeeSalaryService newService() {
         return new EmployeeSalaryService(
-                employeeSalaryPaymentRepository, employeeAdvanceRepository, employeeRepository
+                employeeSalaryPaymentRepository, employeeAdvanceRepository, employeeRepository, auditLogService
         );
     }
 

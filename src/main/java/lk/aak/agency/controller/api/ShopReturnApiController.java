@@ -40,9 +40,16 @@ public class ShopReturnApiController {
         return new ShopReturnDetailResponse(new ShopReturnResponse(shopReturn), items);
     }
 
+    /** Approves the return, credits the shop, and answers with the credit (and any refund due). */
     @PostMapping("/{id}/approve")
-    public void approve(@PathVariable Long id) {
-        shopReturnService.approveReturn(id);
+    public ShopReturnResponse approve(@PathVariable Long id) {
+        return new ShopReturnResponse(shopReturnService.approveReturn(id));
+    }
+
+    /** Damaged / expired goods from approved returns that still have to be claimed from CBL, per product. */
+    @GetMapping("/cbl-claims")
+    public java.util.List<ShopReturnService.CblClaimRow> cblClaims() {
+        return shopReturnService.getUnclaimedCblItems();
     }
 
     @PostMapping("/{id}/reject")

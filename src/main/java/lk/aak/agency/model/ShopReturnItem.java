@@ -35,6 +35,11 @@ public class ShopReturnItem {
     @Column(name = "category", nullable = false, length = 20)
     private String category;
 
+    // Damaged / expired goods are not restocked; once the return is approved they are marked FOR_CLAIM
+    // (to be claimed from CBL). Later CLAIMED when a claim flow exists. Null = nothing to claim.
+    @Column(name = "cbl_claim_status", length = 20)
+    private String cblClaimStatus;
+
     public ShopReturnItem() {
     }
 
@@ -54,7 +59,9 @@ public class ShopReturnItem {
             category = "SALEABLE";
         }
 
-        amount = quantity.multiply(unitPrice);
+        quantity = quantity.setScale(2, java.math.RoundingMode.HALF_UP);
+        unitPrice = unitPrice.setScale(2, java.math.RoundingMode.HALF_UP);
+        amount = quantity.multiply(unitPrice).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     public Long getId() {
@@ -119,5 +126,13 @@ public class ShopReturnItem {
 
     public void setCategory(String category) {
         this.category = category;
+    }
+
+    public String getCblClaimStatus() {
+        return cblClaimStatus;
+    }
+
+    public void setCblClaimStatus(String cblClaimStatus) {
+        this.cblClaimStatus = cblClaimStatus;
     }
 }

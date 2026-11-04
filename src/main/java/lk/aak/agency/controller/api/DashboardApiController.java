@@ -124,7 +124,10 @@ public class DashboardApiController {
                 .filter(paymentVisible)
                 .toList();
 
+        // Collected = cash + bank transfers + CLEARED cheques. Credit notes from shop returns are not money
+        // collected; a bounced cheque is never CLEARED so it never counts.
         BigDecimal todayCollections = todaysPayments.stream()
+                .filter(payment -> !PaymentService.CREDIT_NOTE.equalsIgnoreCase(payment.getPaymentMethod()))
                 .filter(payment -> !"CHEQUE".equalsIgnoreCase(payment.getPaymentMethod())
                         || "CLEARED".equalsIgnoreCase(payment.getChequeStatus()))
                 .map(payment -> payment.getAmount() == null ? BigDecimal.ZERO : payment.getAmount())

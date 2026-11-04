@@ -122,7 +122,6 @@ public class PaymentController {
 
         if (selectedInvoice == null
                 || !"COMPLETED".equalsIgnoreCase(selectedInvoice.getStatus())
-                || !"CREDIT".equalsIgnoreCase(selectedInvoice.getSaleType())
                 || paymentService.getRemainingBalance(selectedInvoice)
                         .compareTo(BigDecimal.ZERO) <= 0) {
 
@@ -397,11 +396,6 @@ public class PaymentController {
                 .filter(invoice ->
                         "COMPLETED".equalsIgnoreCase(
                                 invoice.getStatus()
-                        )
-                )
-                .filter(invoice ->
-                        "CREDIT".equalsIgnoreCase(
-                                invoice.getSaleType()
                         )
                 )
                 .filter(invoice ->

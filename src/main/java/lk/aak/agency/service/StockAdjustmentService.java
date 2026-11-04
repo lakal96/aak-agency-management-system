@@ -33,12 +33,19 @@ public class StockAdjustmentService {
     private final RowLockService
             rowLockService;
 
+    private final AuditLogService
+            auditLogService;
+
     public StockAdjustmentService(
             StockAdjustmentRepository stockAdjustmentRepository,
             StockMovementRepository stockMovementRepository,
             ProductRepository productRepository,
             InventoryService inventoryService,
-            RowLockService rowLockService) {
+            RowLockService rowLockService,
+            AuditLogService auditLogService) {
+
+        this.auditLogService =
+                auditLogService;
 
         this.stockAdjustmentRepository =
                 stockAdjustmentRepository;
@@ -199,6 +206,13 @@ public class StockAdjustmentService {
 
         stockMovementRepository.save(
                 stockMovement
+        );
+
+        auditLogService.record(
+                "STOCK_ADJUSTED", "StockAdjustment", savedAdjustment.getId(),
+                "Stock " + direction + " (" + adjustmentType + ") of "
+                        + quantity.stripTrailingZeros().toPlainString() + " "
+                        + getProductUnit(product) + " for " + product.getDisplayName()
         );
 
         return savedAdjustment;

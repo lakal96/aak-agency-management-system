@@ -159,7 +159,7 @@ public class CustomerApiController {
         List<SalesInvoice> creditInvoices = salesInvoiceRepository
                 .findByCustomerIdOrderByInvoiceDateDesc(id).stream()
                 .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
-                .filter(invoice -> "CREDIT".equalsIgnoreCase(invoice.getSaleType()))
+                .filter(invoice -> PaymentService.isOwedSale(invoice, paymentService.getPaidAmount(invoice.getId())))
                 .toList();
 
         List<Payment> payments = paymentRepository.findBySalesInvoiceCustomerIdOrderByPaymentDateDesc(id);
@@ -222,7 +222,7 @@ public class CustomerApiController {
             List<SalesInvoice> creditInvoices = salesInvoiceRepository
                     .findByCustomerIdOrderByInvoiceDateDesc(customer.getId()).stream()
                     .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
-                    .filter(invoice -> "CREDIT".equalsIgnoreCase(invoice.getSaleType()))
+                    .filter(invoice -> PaymentService.isOwedSale(invoice, paymentService.getPaidAmount(invoice.getId())))
                     .toList();
 
             BigDecimal customerOutstanding = BigDecimal.ZERO;

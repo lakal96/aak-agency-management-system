@@ -19,9 +19,15 @@ public interface SalesInvoiceItemRepository
 
     void deleteBySalesInvoiceId(Long salesInvoiceId);
 
-    /* Dashboard: completed sales by product category, as (category, amount). Products with no category group together. */
+    /*
+     * Dashboard: completed sales by product category, as (category, amount). Products with no category group
+     * together. A line's share is its amount after the bill's discount and return are spread over the lines in
+     * proportion (line amount x net / gross), so the categories add up to the same NET sales the rest of the
+     * dashboard shows (not the gross, before-discount figure).
+     */
     @Query("""
-            SELECT COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorised'), COALESCE(SUM(it.amount), 0)
+            SELECT COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorised'),
+                COALESCE(SUM(CASE WHEN i.grossAmount > 0 THEN it.amount * i.netAmount / i.grossAmount ELSE 0 END), 0)
             FROM SalesInvoiceItem it JOIN it.salesInvoice i LEFT JOIN i.customer c LEFT JOIN it.product p
             WHERE i.status = 'COMPLETED' AND i.invoiceDate BETWEEN :from AND :to
                 AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)

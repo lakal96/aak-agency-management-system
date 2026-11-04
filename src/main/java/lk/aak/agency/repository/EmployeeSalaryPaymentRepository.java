@@ -10,4 +10,6 @@ public interface EmployeeSalaryPaymentRepository extends JpaRepository<EmployeeS
     List<EmployeeSalaryPayment> findAllByOrderByPaymentDateDesc();
 
     List<EmployeeSalaryPayment> findByEmployeeIdOrderByPaymentDateDesc(Long employeeId);
+
+    boolean existsByEmployeeIdAndPayPeriodMonth(Long employeeId, String payPeriodMonth);
 }

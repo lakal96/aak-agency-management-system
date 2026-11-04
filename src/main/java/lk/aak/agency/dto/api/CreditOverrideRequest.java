@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public class CreditOverrideRequest {
 
-    @NotBlank(message = "Approver name is required for a credit override.")
+    // Optional note only: the approver recorded on the bill is the logged-in admin.
     private String approvedBy;
 
     @NotBlank(message = "A reason is required to override the credit limit.")

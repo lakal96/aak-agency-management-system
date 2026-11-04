@@ -26,9 +26,14 @@ class SupplierPaymentServiceTest {
     private SupplierPaymentRepository supplierPaymentRepository;
     @Mock
     private PurchaseInvoiceRepository purchaseInvoiceRepository;
+    @Mock
+    private RowLockService rowLockService;
+    @Mock
+    private AuditLogService auditLogService;
 
     private SupplierPaymentService newService() {
-        return new SupplierPaymentService(supplierPaymentRepository, purchaseInvoiceRepository);
+        return new SupplierPaymentService(
+                supplierPaymentRepository, purchaseInvoiceRepository, rowLockService, auditLogService);
     }
 
     private PurchaseInvoice completedInvoice(Long id, BigDecimal totalAmount) {
