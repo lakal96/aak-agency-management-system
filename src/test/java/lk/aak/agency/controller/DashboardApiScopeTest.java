@@ -172,4 +172,20 @@ class DashboardApiScopeTest {
         assertThat(summary.getTotalOwedToSupplier()).isEqualByComparingTo("304250");
         verify(auditLogRepository).search(any(), any());
     }
+
+    @Test
+    void aDraftBillIsNotMoneyOwedUntilItIsCompleted() {
+
+        Authentication owner = auth("ADMIN");
+        when(salesRepScopeService.resolveScopedEmployeeId(owner)).thenReturn(null);
+        // a draft starts out UNPAID, but nothing is owed until the bill is completed
+        SalesInvoice draft = invoice(12L, shop(3L, 6L), "200000");
+        draft.setStatus("DRAFT");
+        when(salesInvoiceRepository.findByPaymentStatusIn(any())).thenReturn(List.of(myInvoice, otherInvoice, draft));
+
+        DashboardSummaryResponse summary = controller.summary(owner);
+
+        assertThat(summary.getOutstandingReceivables()).isEqualByComparingTo("6000");
+        assertThat(summary.getOutstandingInvoiceCount()).isEqualTo(2);
+    }
 }

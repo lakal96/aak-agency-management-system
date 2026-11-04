@@ -83,7 +83,10 @@ public class DashboardApiController {
                 || (invoice.getCustomer() != null
                 && scopedEmployeeId.equals(invoice.getCustomer().getAssignedEmployeeId()));
 
+        // A draft starts out UNPAID too, but nothing is owed until the bill is completed (the credit
+        // limit check, credit follow-up and reports all count completed bills only).
         List<SalesInvoice> outstandingInvoices = salesInvoiceRepository.findByPaymentStatusIn(OUTSTANDING_STATUSES).stream()
+                .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
                 .filter(invoiceVisible)
                 .toList();
 
