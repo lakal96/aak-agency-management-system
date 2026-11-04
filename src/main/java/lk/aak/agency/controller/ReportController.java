@@ -13,6 +13,7 @@ import lk.aak.agency.repository.SalesInvoiceRepository;
 import lk.aak.agency.repository.StockMovementRepository;
 import lk.aak.agency.service.EmployeeAdvanceService;
 import lk.aak.agency.service.EmployeeSalaryService;
+import lk.aak.agency.service.PaymentService;
 import lk.aak.agency.service.ShopReturnService;
 import lk.aak.agency.service.SupplierPaymentService;
 import lk.aak.agency.service.SupplierReturnService;
@@ -315,6 +316,10 @@ public class ReportController {
 
         for (ShopReturn shopReturn : shopReturnService.getAllReturns()) {
 
+            if (!"APPROVED".equalsIgnoreCase(shopReturn.getStatus())) {
+                continue;
+            }
+
             if (!isDateWithinRange(shopReturn.getReturnDate(), fromDate, toDate)) {
                 continue;
             }
@@ -332,6 +337,10 @@ public class ReportController {
         BigDecimal total = BigDecimal.ZERO;
 
         for (SupplierReturn supplierReturn : supplierReturnService.getAllReturns()) {
+
+            if (!"APPROVED".equalsIgnoreCase(supplierReturn.getStatus())) {
+                continue;
+            }
 
             if (!isDateWithinRange(supplierReturn.getReturnDate(), fromDate, toDate)) {
                 continue;
@@ -517,7 +526,9 @@ public class ReportController {
         for (Payment payment : payments) {
 
             if ("RECEIVED".equalsIgnoreCase(
-                    payment.getStatus())) {
+                    payment.getStatus())
+                    && !PaymentService.CREDIT_NOTE.equalsIgnoreCase(
+                    payment.getPaymentMethod())) {
 
                 total = total.add(
                         zeroIfNull(
@@ -543,12 +554,16 @@ public class ReportController {
                             invoice.getStatus()
                     );
 
-            boolean creditSale =
+            // Credit bills owe until paid; a completed CASH bill is owed until the office records the cash
+            // (old cash bills were marked PAID when completed and stay settled).
+            boolean owedSale =
                     "CREDIT".equalsIgnoreCase(
                             invoice.getSaleType()
-                    );
+                    )
+                            || ("CASH".equalsIgnoreCase(invoice.getSaleType())
+                            && !"PAID".equalsIgnoreCase(invoice.getPaymentStatus()));
 
-            if (completed && creditSale) {
+            if (completed && owedSale) {
 
                 BigDecimal netAmount =
                         zeroIfNull(
@@ -639,7 +654,9 @@ public class ReportController {
         for (Payment payment : payments) {
 
             if ("RECEIVED".equalsIgnoreCase(
-                    payment.getStatus())) {
+                    payment.getStatus())
+                    && !PaymentService.CREDIT_NOTE.equalsIgnoreCase(
+                    payment.getPaymentMethod())) {
 
                 count++;
             }

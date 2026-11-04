@@ -8,7 +8,6 @@ import lk.aak.agency.service.PaymentService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
@@ -40,21 +39,28 @@ public class CollectionApiController {
 
         List<Payment> payments = paymentRepository.findByPaymentDateBetweenOrderByPaymentDateDesc(resolvedFrom, resolvedTo);
 
-        BigDecimal totalCash = methodTotal(payments, "CASH");
-        BigDecimal totalCheque = methodTotal(payments, "CHEQUE");
-        BigDecimal totalBankTransfer = methodTotal(payments, "BANK_TRANSFER");
+        // Rules (same as the dashboard): a cheque is collected once it CLEARS; bounced (RETURNED) cheques
+        // are never counted; bank transfers are collected but are not cash in hand; credit notes from
+        // shop returns are not collections at all (see PaymentService.summariseCollections).
+        PaymentService.CollectionTotals totals = paymentService.summariseCollections(payments);
 
         return new CollectionSummaryResponse(
                 resolvedFrom,
                 resolvedTo,
-                totalCash.add(totalCheque).add(totalBankTransfer),
-                totalCash,
-                totalCheque,
-                totalBankTransfer,
-                methodCount(payments, "CASH"),
-                methodCount(payments, "CHEQUE"),
-                methodCount(payments, "BANK_TRANSFER"),
-                payments.stream().map(PaymentResponse::new).toList()
+                totals.totalCollected(),
+                totals.totalCash(),
+                totals.totalCheque(),
+                totals.totalBankTransfer(),
+                totals.cashCount(),
+                totals.chequeCount(),
+                totals.bankTransferCount(),
+                payments.stream()
+                        .filter(payment -> !PaymentService.CREDIT_NOTE.equalsIgnoreCase(payment.getPaymentMethod()))
+                        .map(PaymentResponse::new)
+                        .toList(),
+                totals.chequeClearedTotal(),
+                totals.chequeNotYetClearedTotal(),
+                totals.chequeReturnedTotal()
         );
     }
 
@@ -72,16 +78,5 @@ public class CollectionApiController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
         paymentService.markHandedOver(collectorEmployeeId, date);
-    }
-
-    private BigDecimal methodTotal(List<Payment> payments, String method) {
-        return payments.stream()
-                .filter(payment -> method.equalsIgnoreCase(payment.getPaymentMethod()))
-                .map(payment -> payment.getAmount() == null ? BigDecimal.ZERO : payment.getAmount())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private long methodCount(List<Payment> payments, String method) {
-        return payments.stream().filter(payment -> method.equalsIgnoreCase(payment.getPaymentMethod())).count();
     }
 }

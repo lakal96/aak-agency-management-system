@@ -414,9 +414,13 @@ public class CollectionReportController {
     private boolean isReceivedPayment(
             Payment payment) {
 
+        // Credit notes (from approved shop returns) are not collected money.
         return payment != null
                 && "RECEIVED".equalsIgnoreCase(
                 payment.getStatus()
+        )
+                && !PaymentService.CREDIT_NOTE.equalsIgnoreCase(
+                payment.getPaymentMethod()
         );
     }
 

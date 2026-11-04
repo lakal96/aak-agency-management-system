@@ -8,12 +8,16 @@ import lk.aak.agency.repository.EmployeeRepository;
 import lk.aak.agency.repository.EmployeeSalaryPaymentRepository;
 import lk.aak.agency.util.BusinessTime;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Locale;
 import java.util.List;
 
 @Service
@@ -22,12 +26,15 @@ public class EmployeeSalaryService {
     private final EmployeeSalaryPaymentRepository employeeSalaryPaymentRepository;
     private final EmployeeAdvanceRepository employeeAdvanceRepository;
     private final EmployeeRepository employeeRepository;
+    private final AuditLogService auditLogService;
 
     public EmployeeSalaryService(
             EmployeeSalaryPaymentRepository employeeSalaryPaymentRepository,
             EmployeeAdvanceRepository employeeAdvanceRepository,
-            EmployeeRepository employeeRepository) {
+            EmployeeRepository employeeRepository,
+            AuditLogService auditLogService) {
 
+        this.auditLogService = auditLogService;
         this.employeeSalaryPaymentRepository = employeeSalaryPaymentRepository;
         this.employeeAdvanceRepository = employeeAdvanceRepository;
         this.employeeRepository = employeeRepository;
@@ -45,8 +52,11 @@ public class EmployeeSalaryService {
      * Records a salary payment for one employee/month. The advance deduction is the sum of
      * the specific outstanding advances the office chooses to settle with this payment - not
      * a free-typed number - so it can never drift from what's actually still owed.
+     *
+     * One salary payment per employee per month; a month after the current Sri Lanka month is refused;
+     * the salary is kept to 2 decimals (half-up).
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public EmployeeSalaryPayment recordSalaryPayment(
             Long employeeId,
             String payPeriodMonth,
@@ -55,6 +65,10 @@ public class EmployeeSalaryService {
             String notes,
             List<Long> advanceIdsToSettle) {
 
+        // Lock the employee so two simultaneous payments for the same month queue up and the second one
+        // sees the first.
+        employeeRepository.lockById(employeeId);
+
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Selected employee was not found."));
 
@@ -62,16 +76,39 @@ public class EmployeeSalaryService {
             throw new IllegalArgumentException("Gross salary must be greater than zero.");
         }
 
+        grossSalary = grossSalary.setScale(2, RoundingMode.HALF_UP);
+
+        if (grossSalary.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Gross salary must be greater than zero.");
+        }
+
         if (payPeriodMonth == null || payPeriodMonth.isBlank()) {
             throw new IllegalArgumentException("Please select the pay period month.");
         }
 
-        LocalDate payPeriodCutoff;
+        YearMonth payPeriod;
         try {
-            payPeriodCutoff = YearMonth.parse(payPeriodMonth).atEndOfMonth();
+            payPeriod = YearMonth.parse(payPeriodMonth.trim());
         } catch (DateTimeParseException ex) {
             throw new IllegalArgumentException("Pay period month must be in YYYY-MM format.");
         }
+
+        if (payPeriod.isAfter(YearMonth.from(BusinessTime.today()))) {
+            throw new IllegalArgumentException(
+                    "Salary cannot be recorded for a future month. The latest month you can pay is "
+                            + monthLabel(YearMonth.from(BusinessTime.today())) + "."
+            );
+        }
+
+        payPeriodMonth = payPeriod.toString();
+
+        if (employeeSalaryPaymentRepository.existsByEmployeeIdAndPayPeriodMonth(employeeId, payPeriodMonth)) {
+            throw new IllegalArgumentException(
+                    "Salary for " + monthLabel(payPeriod) + " was already recorded for " + employee.getFullName() + "."
+            );
+        }
+
+        LocalDate payPeriodCutoff = payPeriod.atEndOfMonth();
 
         List<EmployeeAdvance> unsettledAdvances =
                 employeeAdvanceRepository.findByEmployeeIdAndSettledFalseOrderByAdvanceDateAsc(employeeId);
@@ -118,6 +155,18 @@ public class EmployeeSalaryService {
             employeeAdvanceRepository.save(advance);
         }
 
+        auditLogService.record(
+                "SALARY_PAID", "EmployeeSalaryPayment", savedPayment.getId(),
+                "Paid salary for " + monthLabel(payPeriod) + " to " + employee.getFullName()
+                        + ": gross Rs. " + grossSalary.toPlainString()
+                        + ", advances deducted Rs. " + advanceDeduction.toPlainString()
+                        + ", net paid Rs. " + savedPayment.getNetPaid().toPlainString()
+        );
+
         return savedPayment;
+    }
+
+    private static String monthLabel(YearMonth month) {
+        return month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH));
     }
 }

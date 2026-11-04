@@ -16,6 +16,11 @@ public class CollectionSummaryResponse {
     private final long chequePaymentCount;
     private final long bankTransferPaymentCount;
     private final List<PaymentResponse> payments;
+    // totalCollected counts cash + bank transfers + CLEARED cheques (the dashboard rule); the cheque figures
+    // below show where the rest of totalCheque is. Returned (bounced) cheques are in none of the totals.
+    private final BigDecimal chequeClearedTotal;
+    private final BigDecimal chequeNotYetClearedTotal;
+    private final BigDecimal chequeReturnedTotal;
 
     public CollectionSummaryResponse(
             LocalDate fromDate,
@@ -27,7 +32,14 @@ public class CollectionSummaryResponse {
             long cashPaymentCount,
             long chequePaymentCount,
             long bankTransferPaymentCount,
-            List<PaymentResponse> payments) {
+            List<PaymentResponse> payments,
+            BigDecimal chequeClearedTotal,
+            BigDecimal chequeNotYetClearedTotal,
+            BigDecimal chequeReturnedTotal) {
+
+        this.chequeClearedTotal = chequeClearedTotal;
+        this.chequeNotYetClearedTotal = chequeNotYetClearedTotal;
+        this.chequeReturnedTotal = chequeReturnedTotal;
 
         this.fromDate = fromDate;
         this.toDate = toDate;
@@ -79,5 +91,17 @@ public class CollectionSummaryResponse {
 
     public List<PaymentResponse> getPayments() {
         return payments;
+    }
+
+    public BigDecimal getChequeClearedTotal() {
+        return chequeClearedTotal;
+    }
+
+    public BigDecimal getChequeNotYetClearedTotal() {
+        return chequeNotYetClearedTotal;
+    }
+
+    public BigDecimal getChequeReturnedTotal() {
+        return chequeReturnedTotal;
     }
 }

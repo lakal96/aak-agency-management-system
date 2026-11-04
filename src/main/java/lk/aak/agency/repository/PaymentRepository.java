@@ -45,12 +45,13 @@ public interface PaymentRepository
     /*
      * Sum of RECEIVED payments matching the same search filter, used for the
      * list screen's "Total Collected" summary card (independent of pagination).
+     * Credit notes (from approved shop returns) are not collected money and are excluded.
      */
     @Query("""
             SELECT COALESCE(SUM(p.amount), 0) FROM Payment p
             LEFT JOIN p.salesInvoice i
             LEFT JOIN i.customer c
-            WHERE UPPER(p.status) = 'RECEIVED'
+            WHERE UPPER(p.status) = 'RECEIVED' AND UPPER(p.paymentMethod) <> 'CREDIT_NOTE'
                 AND (:keyword IS NULL OR :keyword = ''
                     OR LOWER(p.receiptNumber) LIKE LOWER(CONCAT('%', :keyword, '%'))
                     OR LOWER(i.invoiceNumber) LIKE LOWER(CONCAT('%', :keyword, '%'))
@@ -69,7 +70,7 @@ public interface PaymentRepository
             SELECT COUNT(p) FROM Payment p
             LEFT JOIN p.salesInvoice i
             LEFT JOIN i.customer c
-            WHERE UPPER(p.status) = 'RECEIVED'
+            WHERE UPPER(p.status) = 'RECEIVED' AND UPPER(p.paymentMethod) <> 'CREDIT_NOTE'
                 AND (:keyword IS NULL OR :keyword = ''
                     OR LOWER(p.receiptNumber) LIKE LOWER(CONCAT('%', :keyword, '%'))
                     OR LOWER(i.invoiceNumber) LIKE LOWER(CONCAT('%', :keyword, '%'))
@@ -118,6 +119,7 @@ public interface PaymentRepository
             FROM Payment p
             WHERE p.paymentDate BETWEEN :fromDate AND :toDate
             AND UPPER(p.status) = 'RECEIVED'
+            AND UPPER(p.paymentMethod) <> 'CREDIT_NOTE'
             """)
     BigDecimal calculateReceivedAmountBetweenDates(
             @Param("fromDate") LocalDate fromDate,

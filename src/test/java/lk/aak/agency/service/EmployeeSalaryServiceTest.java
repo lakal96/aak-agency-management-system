@@ -35,10 +35,12 @@ class EmployeeSalaryServiceTest {
     private EmployeeAdvanceRepository employeeAdvanceRepository;
     @Mock
     private EmployeeRepository employeeRepository;
+    @Mock
+    private AuditLogService auditLogService;
 
     private EmployeeSalaryService newService() {
         return new EmployeeSalaryService(
-                employeeSalaryPaymentRepository, employeeAdvanceRepository, employeeRepository
+                employeeSalaryPaymentRepository, employeeAdvanceRepository, employeeRepository, auditLogService
         );
     }
 
@@ -142,5 +144,103 @@ class EmployeeSalaryServiceTest {
         assertThatThrownBy(() -> service.recordSalaryPayment(
                 1L, "2026-09", BigDecimal.ZERO, BusinessTime.today(), null, List.of()
         )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void recordSalaryPayment_secondPaymentForTheSameMonthIsRefusedWithAClearMessage() {
+
+        EmployeeSalaryService service = newService();
+
+        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
+        when(employeeSalaryPaymentRepository.existsByEmployeeIdAndPayPeriodMonth(1L, "2026-09")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.recordSalaryPayment(
+                1L, "2026-09", new BigDecimal("30000"), BusinessTime.today(), null, List.of()
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Salary for September 2026 was already recorded for Nimal Rep.");
+
+        verify(employeeSalaryPaymentRepository, never()).save(any(EmployeeSalaryPayment.class));
+    }
+
+    @Test
+    void recordSalaryPayment_locksTheEmployeeBeforeCheckingForAnEarlierPayment() {
+
+        EmployeeSalaryService service = newService();
+
+        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
+        when(employeeSalaryPaymentRepository.save(any(EmployeeSalaryPayment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.recordSalaryPayment(1L, "2026-09", new BigDecimal("30000"), BusinessTime.today(), null, List.of());
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(employeeRepository, employeeSalaryPaymentRepository);
+        order.verify(employeeRepository).lockById(1L);
+        order.verify(employeeSalaryPaymentRepository).existsByEmployeeIdAndPayPeriodMonth(1L, "2026-09");
+        order.verify(employeeSalaryPaymentRepository).save(any(EmployeeSalaryPayment.class));
+    }
+
+    @Test
+    void recordSalaryPayment_rejectsAMonthAfterTheCurrentMonth_butAllowsTheCurrentOne() {
+
+        EmployeeSalaryService service = newService();
+
+        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
+        when(employeeSalaryPaymentRepository.save(any(EmployeeSalaryPayment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        java.time.YearMonth current = java.time.YearMonth.from(BusinessTime.today());
+
+        assertThatThrownBy(() -> service.recordSalaryPayment(
+                1L, current.plusMonths(1).toString(), new BigDecimal("30000"), BusinessTime.today(), null, List.of()
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("future month");
+
+        assertThatThrownBy(() -> service.recordSalaryPayment(
+                1L, "2099-01", new BigDecimal("30000"), BusinessTime.today(), null, List.of()
+        )).isInstanceOf(IllegalArgumentException.class);
+
+        EmployeeSalaryPayment thisMonth = service.recordSalaryPayment(
+                1L, current.toString(), new BigDecimal("30000"), BusinessTime.today(), null, List.of());
+        assertThat(thisMonth.getPayPeriodMonth()).isEqualTo(current.toString());
+    }
+
+    @Test
+    void recordSalaryPayment_roundsTheSalaryToTwoDecimals() {
+
+        EmployeeSalaryService service = newService();
+
+        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
+        when(employeeSalaryPaymentRepository.save(any(EmployeeSalaryPayment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        EmployeeSalaryPayment payment = service.recordSalaryPayment(
+                1L, "2026-09", new BigDecimal("30000.456"), BusinessTime.today(), null, List.of());
+
+        assertThat(payment.getGrossSalary()).isEqualByComparingTo("30000.46");
+        assertThat(payment.getNetPaid()).isEqualByComparingTo("30000.46");
+
+        assertThatThrownBy(() -> service.recordSalaryPayment(
+                1L, "2026-08", new BigDecimal("0.004"), BusinessTime.today(), null, List.of()
+        )).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void recordSalaryPayment_isAuditedWithTheAmounts() {
+
+        EmployeeSalaryService service = newService();
+
+        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee()));
+        when(employeeSalaryPaymentRepository.save(any(EmployeeSalaryPayment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.recordSalaryPayment(1L, "2026-09", new BigDecimal("30000"), BusinessTime.today(), null, List.of());
+
+        verify(auditLogService).record(
+                org.mockito.ArgumentMatchers.eq("SALARY_PAID"),
+                org.mockito.ArgumentMatchers.eq("EmployeeSalaryPayment"),
+                any(),
+                org.mockito.ArgumentMatchers.contains("30000"));
     }
 }

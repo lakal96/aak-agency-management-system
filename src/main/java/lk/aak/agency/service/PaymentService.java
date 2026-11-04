@@ -10,9 +10,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,13 +43,19 @@ public class PaymentService {
     private final SalesInvoiceRepository salesInvoiceRepository;
     private final EmployeeRepository employeeRepository;
     private final AuditLogService auditLogService;
+    private final RowLockService rowLockService;
+
+    /** Not a payment method a clerk can pick: written only when an approved shop return credits a bill. */
+    public static final String CREDIT_NOTE = "CREDIT_NOTE";
 
     public PaymentService(
             PaymentRepository paymentRepository,
             SalesInvoiceRepository salesInvoiceRepository,
             EmployeeRepository employeeRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            RowLockService rowLockService) {
 
+        this.rowLockService = rowLockService;
         this.paymentRepository = paymentRepository;
         this.salesInvoiceRepository =
                 salesInvoiceRepository;
@@ -136,6 +144,10 @@ public class PaymentService {
         BigDecimal paidAmount =
                 getPaidAmount(invoice.getId());
 
+        if (isMarkedPaidWithoutPaymentRecord(invoice, paidAmount)) {
+            return BigDecimal.ZERO;
+        }
+
         BigDecimal balance =
                 netAmount.subtract(paidAmount);
 
@@ -146,11 +158,53 @@ public class PaymentService {
         return balance;
     }
 
-    @Transactional
+    /**
+     * Whether a completed bill belongs in a shop's receivables / credit history / follow-up. A CREDIT bill always
+     * does. A CASH bill does until it is paid (the office records the cash), and stays listed once payments
+     * exist on it; an old cash bill that was marked PAID at completion with no payment record is settled and
+     * left out. (Only CREDIT bills ever count towards the credit limit - see SalesInvoiceService.)
+     */
+    public static boolean isOwedSale(SalesInvoice invoice, BigDecimal paidAmount) {
+
+        if ("CREDIT".equalsIgnoreCase(invoice.getSaleType())) {
+            return true;
+        }
+
+        if (!"CASH".equalsIgnoreCase(invoice.getSaleType())) {
+            return false;
+        }
+
+        boolean settledWithoutRecord = "PAID".equalsIgnoreCase(invoice.getPaymentStatus())
+                && (paidAmount == null || paidAmount.signum() == 0);
+
+        return !settledWithoutRecord;
+    }
+
+    /**
+     * Cash bills completed before cash payments were recorded in the system were marked PAID with no
+     * payment row. They are settled, whatever the (empty) payment records say; leave them alone.
+     */
+    private boolean isMarkedPaidWithoutPaymentRecord(SalesInvoice invoice, BigDecimal paidAmount) {
+
+        return "CASH".equalsIgnoreCase(invoice.getSaleType())
+                && "PAID".equalsIgnoreCase(invoice.getPaymentStatus())
+                && paidAmount.compareTo(zeroIfNull(invoice.getNetAmount())) < 0;
+    }
+
+    /*
+     * The bill's row is locked BEFORE its balance is read, and the balance is read at READ_COMMITTED
+     * so it includes every payment another request has just committed. Two simultaneous payments
+     * for the same bill queue up; the second sees the first and is checked against what is left.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Payment savePayment(
             Payment payment) {
 
         validateBasicPaymentInformation(payment);
+
+        rowLockService.lockSalesInvoice(
+                payment.getSalesInvoice().getId()
+        );
 
         SalesInvoice invoice =
                 getValidatedSalesInvoice(payment);
@@ -160,6 +214,15 @@ public class PaymentService {
 
         BigDecimal currentPaidAmount =
                 getPaidAmount(invoice.getId());
+
+        if (isMarkedPaidWithoutPaymentRecord(invoice, currentPaidAmount)) {
+
+            throw new IllegalArgumentException(
+                    "This cash bill was already marked as paid when it was completed "
+                            + "(before cash payments were recorded in the system), "
+                            + "so no payment can be added to it."
+            );
+        }
 
         BigDecimal remainingBalance =
                 zeroIfNull(invoice.getNetAmount())
@@ -232,7 +295,38 @@ public class PaymentService {
                 updatedPaidAmount
         );
 
+        auditLogService.record(
+                "PAYMENT_CREATED", "Payment", savedPayment.getId(),
+                "Recorded payment \"" + savedPayment.getReceiptNumber() + "\" of Rs. "
+                        + savedPayment.getAmount().toPlainString()
+                        + " (" + savedPayment.getPaymentMethod() + ") against sales invoice \""
+                        + invoice.getInvoiceNumber() + "\""
+                        + (savedPayment.getCollectedByName() == null
+                        ? "" : ", collected by " + savedPayment.getCollectedByName())
+        );
+
         return savedPayment;
+    }
+
+    /**
+     * What counts as money a collector has to hand over to the office (and as collections):
+     * <ul>
+     * <li>CASH - always.</li>
+     * <li>CHEQUE - from the day it is collected while it is RECEIVED, DEPOSITED or CLEARED; never a
+     *     RETURNED (bounced) cheque. Cheques are reported separately from cash.</li>
+     * <li>BANK_TRANSFER and CREDIT_NOTE never pass through a collector's hands, so they are
+     *     never part of a hand-over.</li>
+     * </ul>
+     */
+    static boolean isHandoverItem(Payment payment) {
+
+        if ("RETURNED".equalsIgnoreCase(payment.getStatus())) {
+            return false;
+        }
+
+        return "CASH".equalsIgnoreCase(payment.getPaymentMethod())
+                || ("CHEQUE".equalsIgnoreCase(payment.getPaymentMethod())
+                && !"RETURNED".equalsIgnoreCase(payment.getChequeStatus()));
     }
 
     /**
@@ -246,7 +340,7 @@ public class PaymentService {
         for (Payment payment
                 : paymentRepository.findByPaymentDateOrderByPaymentDateDesc(date)) {
 
-            if (payment.getCollectedByEmployeeId() == null) {
+            if (payment.getCollectedByEmployeeId() == null || !isHandoverItem(payment)) {
                 continue;
             }
 
@@ -277,7 +371,9 @@ public class PaymentService {
         List<Payment> payments =
                 paymentRepository.findByCollectedByEmployeeIdAndPaymentDate(
                         collectedByEmployeeId, date
-                );
+                ).stream()
+                        .filter(PaymentService::isHandoverItem)
+                        .toList();
 
         if (payments.isEmpty()) {
             throw new IllegalArgumentException(
@@ -290,6 +386,96 @@ public class PaymentService {
             payment.setHandoverDate(BusinessTime.today());
             paymentRepository.save(payment);
         }
+
+        auditLogService.record(
+                "COLLECTION_HANDED_OVER", "Employee", collectedByEmployeeId,
+                "Marked " + payments.size() + " collection(s) of " + date + " as handed over by "
+                        + payments.get(0).getCollectedByName()
+        );
+    }
+
+    /**
+     * Collections for a period, on the same rule as the dashboard: a cheque counts as COLLECTED only once it
+     * has CLEARED. Returned (bounced) cheques are never counted; bank transfers are collected money but
+     * are not cash in anybody's hands; credit notes (from shop returns) are not collections at all.
+     *
+     * @param payments the payments of the period (any status, any method)
+     */
+    public CollectionTotals summariseCollections(List<Payment> payments) {
+
+        BigDecimal cash = BigDecimal.ZERO;
+        BigDecimal chequeAll = BigDecimal.ZERO;
+        BigDecimal chequeCleared = BigDecimal.ZERO;
+        BigDecimal chequeNotYetCleared = BigDecimal.ZERO;
+        BigDecimal chequeReturned = BigDecimal.ZERO;
+        BigDecimal bank = BigDecimal.ZERO;
+        long cashCount = 0;
+        long chequeCount = 0;
+        long bankCount = 0;
+
+        for (Payment payment : payments) {
+
+            BigDecimal amount = zeroIfNull(payment.getAmount());
+            String method = payment.getPaymentMethod();
+
+            if (CREDIT_NOTE.equalsIgnoreCase(method)) {
+                continue;
+            }
+
+            boolean returned = "RETURNED".equalsIgnoreCase(payment.getStatus())
+                    || "RETURNED".equalsIgnoreCase(payment.getChequeStatus());
+
+            if ("CHEQUE".equalsIgnoreCase(method)) {
+
+                if (returned) {
+                    chequeReturned = chequeReturned.add(amount);
+                    continue;
+                }
+
+                chequeAll = chequeAll.add(amount);
+                chequeCount++;
+
+                if ("CLEARED".equalsIgnoreCase(payment.getChequeStatus())) {
+                    chequeCleared = chequeCleared.add(amount);
+                } else {
+                    chequeNotYetCleared = chequeNotYetCleared.add(amount);
+                }
+                continue;
+            }
+
+            if (returned) {
+                continue;
+            }
+
+            if ("CASH".equalsIgnoreCase(method)) {
+                cash = cash.add(amount);
+                cashCount++;
+
+            } else if ("BANK_TRANSFER".equalsIgnoreCase(method)) {
+                bank = bank.add(amount);
+                bankCount++;
+            }
+        }
+
+        return new CollectionTotals(
+                cash.add(bank).add(chequeCleared),
+                cash, chequeAll, bank,
+                chequeCleared, chequeNotYetCleared, chequeReturned,
+                cashCount, chequeCount, bankCount
+        );
+    }
+
+    public record CollectionTotals(
+            BigDecimal totalCollected,
+            BigDecimal totalCash,
+            BigDecimal totalCheque,
+            BigDecimal totalBankTransfer,
+            BigDecimal chequeClearedTotal,
+            BigDecimal chequeNotYetClearedTotal,
+            BigDecimal chequeReturnedTotal,
+            long cashCount,
+            long chequeCount,
+            long bankTransferCount) {
     }
 
     public static class HandoverSummaryRow {
@@ -326,7 +512,7 @@ public class PaymentService {
         }
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Payment updateChequeStatus(
             Long paymentId,
             String newChequeStatus,
@@ -335,6 +521,15 @@ public class PaymentService {
 
         Payment payment =
                 getPaymentById(paymentId);
+
+        // The cheque's status moves the bill's balance: lock the bill, then read the cheque as it is now.
+        if (payment.getSalesInvoice() != null && payment.getSalesInvoice().getId() != null) {
+
+            rowLockService.forget(payment);
+            rowLockService.lockSalesInvoice(payment.getSalesInvoice().getId());
+
+            payment = getPaymentById(paymentId);
+        }
 
         if (!"CHEQUE".equalsIgnoreCase(
                 payment.getPaymentMethod())) {
@@ -368,6 +563,8 @@ public class PaymentService {
 
         String currentChequeStatus =
                 payment.getChequeStatus();
+
+        String previousChequeStatus = currentChequeStatus;
 
         if ("RETURNED".equalsIgnoreCase(
                 currentChequeStatus)) {
@@ -467,25 +664,65 @@ public class PaymentService {
                 updatedPaidAmount
         );
 
+        auditLogService.record(
+                "CHEQUE_STATUS_CHANGED", "Payment", paymentId,
+                "Cheque " + savedPayment.getChequeNumber() + " (receipt \"" + savedPayment.getReceiptNumber()
+                        + "\", Rs. " + savedPayment.getAmount().toPlainString() + ") changed from "
+                        + (previousChequeStatus == null ? "RECEIVED" : previousChequeStatus)
+                        + " to " + savedPayment.getChequeStatus()
+                        + ("RETURNED".equals(savedPayment.getChequeStatus())
+                        ? " - reason: " + savedPayment.getChequeReturnReason() : "")
+        );
+
         return savedPayment;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deletePayment(
             Long paymentId) {
 
         Payment payment =
                 getPaymentById(paymentId);
 
-        SalesInvoice invoice =
-                payment.getSalesInvoice();
-
-        if (invoice == null
-                || invoice.getId() == null) {
+        if (payment.getSalesInvoice() == null
+                || payment.getSalesInvoice().getId() == null) {
 
             throw new IllegalArgumentException(
                     "The payment is not connected "
                             + "to a sales invoice."
+            );
+        }
+
+        // Lock the bill first, then look at the payment as it is now (it may have just been cleared
+        // or handed over by someone else).
+        rowLockService.forget(payment);
+        rowLockService.lockSalesInvoice(payment.getSalesInvoice().getId());
+
+        payment = getPaymentById(paymentId);
+
+        SalesInvoice invoice =
+                payment.getSalesInvoice();
+
+        if (CREDIT_NOTE.equalsIgnoreCase(payment.getPaymentMethod())) {
+
+            throw new IllegalArgumentException(
+                    "This is a credit from an approved shop return, not a payment, so it cannot "
+                            + "be deleted here."
+            );
+        }
+
+        if ("CLEARED".equalsIgnoreCase(payment.getChequeStatus())) {
+
+            throw new IllegalArgumentException(
+                    "This payment cannot be deleted because its cheque has already cleared at the bank."
+            );
+        }
+
+        if ("HANDED_OVER".equalsIgnoreCase(payment.getHandoverStatus())) {
+
+            throw new IllegalArgumentException(
+                    "This payment cannot be deleted because the collector has already handed it over "
+                            + "to the office."
             );
         }
 
@@ -502,8 +739,68 @@ public class PaymentService {
 
         auditLogService.record(
                 "PAYMENT_DELETED", "Payment", paymentId,
-                "Deleted payment receipt \"" + payment.getReceiptNumber() + "\""
+                "Deleted payment receipt \"" + payment.getReceiptNumber() + "\" of Rs. "
+                        + payment.getAmount().toPlainString() + " (" + payment.getPaymentMethod()
+                        + ") from sales invoice \"" + invoice.getInvoiceNumber() + "\""
         );
+    }
+
+    /**
+     * Credits a bill because an approved shop return took goods back. Written as a payment row with
+     * method CREDIT_NOTE so every balance calculation (receivables, credit limit, follow-up, invoice payment
+     * status) already treats it as settling part of the bill, while collections, hand-overs and the
+     * "total collected" figures ignore it (it is not money anybody collected).
+     *
+     * The credit is capped at what the shop still owes on the bill; anything above that was already paid
+     * and is reported back as {@code refundDue} (no refund is created automatically).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public CreditNoteResult applyCreditNote(
+            Long salesInvoiceId,
+            BigDecimal creditAmount,
+            String receiptNumber,
+            LocalDate creditDate,
+            String notes) {
+
+        BigDecimal credit = zeroIfNull(creditAmount).setScale(2, RoundingMode.HALF_UP);
+
+        rowLockService.lockSalesInvoice(salesInvoiceId);
+
+        SalesInvoice invoice = salesInvoiceRepository.findById(salesInvoiceId)
+                .orElseThrow(() -> new IllegalArgumentException("Selected sales invoice was not found."));
+
+        if (paymentRepository.existsByReceiptNumber(receiptNumber)) {
+
+            throw new IllegalArgumentException(
+                    "A credit for this return has already been recorded on the bill."
+            );
+        }
+
+        BigDecimal remaining = getRemainingBalance(invoice);
+        BigDecimal applied = credit.min(remaining);
+        BigDecimal refundDue = credit.subtract(applied);
+
+        if (applied.compareTo(BigDecimal.ZERO) > 0) {
+
+            Payment note = new Payment();
+            note.setReceiptNumber(receiptNumber);
+            note.setSalesInvoice(invoice);
+            note.setPaymentDate(creditDate == null ? BusinessTime.today() : creditDate);
+            note.setAmount(applied);
+            note.setPaymentMethod(CREDIT_NOTE);
+            note.setStatus("RECEIVED");
+            note.setNotes(notes);
+
+            paymentRepository.save(note);
+            paymentRepository.flush();
+
+            updateInvoicePaymentStatus(invoice, getPaidAmount(invoice.getId()));
+        }
+
+        return new CreditNoteResult(credit, applied, refundDue);
+    }
+
+    public record CreditNoteResult(BigDecimal creditValue, BigDecimal creditApplied, BigDecimal refundDue) {
     }
 
     private void validateBasicPaymentInformation(
@@ -554,7 +851,8 @@ public class PaymentService {
         }
 
         BigDecimal paymentAmount =
-                zeroIfNull(payment.getAmount());
+                zeroIfNull(payment.getAmount())
+                        .setScale(2, RoundingMode.HALF_UP);
 
         if (paymentAmount.compareTo(
                 BigDecimal.ZERO) <= 0) {
@@ -598,15 +896,6 @@ public class PaymentService {
             throw new IllegalArgumentException(
                     "Payments can only be recorded "
                             + "for completed sales invoices."
-            );
-        }
-
-        if (!"CREDIT".equalsIgnoreCase(
-                invoice.getSaleType())) {
-
-            throw new IllegalArgumentException(
-                    "Payments cannot be recorded here "
-                            + "for a cash sales invoice."
             );
         }
 

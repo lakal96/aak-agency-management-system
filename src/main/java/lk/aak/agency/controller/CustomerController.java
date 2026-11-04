@@ -131,6 +131,12 @@ public class CustomerController {
                 }
             }
 
+            if (SalesRepScopeService.NO_ACCESS_SENTINEL.equals(scopedEmployeeId)) {
+                redirectAttributes.addFlashAttribute("errorMessage",
+                        "Your login is not linked to an employee record yet, so you cannot add shops. Please ask the office.");
+                return "redirect:/customers";
+            }
+
             // A SALES_REP can only ever assign new/edited shops to themselves.
             customer.setAssignedEmployeeId(scopedEmployeeId);
         }

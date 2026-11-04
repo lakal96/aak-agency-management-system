@@ -19,7 +19,6 @@ import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.service.PurchaseInvoiceService;
 import lk.aak.agency.service.PdfService;
 import lk.aak.agency.service.SupplierPaymentService;
-import lk.aak.agency.util.BusinessTime;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -164,22 +163,27 @@ public class PurchaseInvoiceApiController {
         PurchaseInvoice invoice = purchaseInvoiceRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Purchase invoice not found."));
 
+        // Refuse early (nothing written to disk) once the bill is completed and verified ...
+        purchaseInvoiceService.requireFileCanBeReplaced(invoice);
+
         var storedFile = purchaseInvoiceFileService.storeFile(file);
-        String previousStoredFileName = invoice.getInvoiceFileStoredName();
 
-        invoice.setInvoiceFileOriginalName(storedFile.originalFileName());
-        invoice.setInvoiceFileStoredName(storedFile.storedFileName());
-        invoice.setInvoiceFileContentType(storedFile.contentType());
-        invoice.setInvoiceFileSize(storedFile.fileSize());
-        invoice.setInvoiceFileUploadedAt(BusinessTime.now());
+        PurchaseInvoiceService.FileReplacement replacement;
+        try {
+            // ... and again under the invoice row lock, in case it was completed in the meantime.
+            replacement = purchaseInvoiceService.attachInvoiceFile(id, storedFile);
+        } catch (RuntimeException exception) {
+            purchaseInvoiceFileService.deleteFile(storedFile.storedFileName());
+            throw exception;
+        }
 
-        PurchaseInvoice saved = purchaseInvoiceRepository.save(invoice);
+        String previousStoredFileName = replacement.previousStoredFileName();
 
         if (previousStoredFileName != null && !previousStoredFileName.isBlank()) {
             purchaseInvoiceFileService.deleteFile(previousStoredFileName);
         }
 
-        return new PurchaseInvoiceResponse(saved);
+        return new PurchaseInvoiceResponse(replacement.invoice());
     }
 
     @GetMapping("/{id}/original-file")

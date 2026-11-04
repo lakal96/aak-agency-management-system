@@ -169,7 +169,7 @@ public class CustomerApiController {
         List<SalesInvoice> creditInvoices = salesInvoiceRepository
                 .findByCustomerIdOrderByInvoiceDateDesc(id).stream()
                 .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
-                .filter(invoice -> "CREDIT".equalsIgnoreCase(invoice.getSaleType()))
+                .filter(invoice -> PaymentService.isOwedSale(invoice, paymentService.getPaidAmount(invoice.getId())))
                 .toList();
 
         List<Payment> payments = paymentRepository.findBySalesInvoiceCustomerIdOrderByPaymentDateDesc(id);
@@ -239,7 +239,7 @@ public class CustomerApiController {
             List<SalesInvoice> creditInvoices = salesInvoiceRepository
                     .findByCustomerIdOrderByInvoiceDateDesc(customer.getId()).stream()
                     .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
-                    .filter(invoice -> "CREDIT".equalsIgnoreCase(invoice.getSaleType()))
+                    .filter(invoice -> PaymentService.isOwedSale(invoice, paymentService.getPaidAmount(invoice.getId())))
                     .toList();
 
             BigDecimal customerOutstanding = BigDecimal.ZERO;
@@ -301,6 +301,12 @@ public class CustomerApiController {
         // A SALES_REP can only ever assign new shops to themselves, never to another employee.
         Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
         if (scopedEmployeeId != null) {
+            if (SalesRepScopeService.NO_ACCESS_SENTINEL.equals(scopedEmployeeId)) {
+                // Without a linked employee record there is no one to assign the shop to; storing the
+                // placeholder id would hand the shop to every other unlinked login.
+                throw new IllegalArgumentException(
+                        "Your login is not linked to an employee record yet, so you cannot add shops. Please ask the office.");
+            }
             customer.setAssignedEmployeeId(scopedEmployeeId);
         }
 

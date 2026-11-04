@@ -1,6 +1,7 @@
 package lk.aak.agency.repository;
 
 import lk.aak.agency.model.AuditLog;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +17,14 @@ class AuditLogRepositoryTest {
 
     @Autowired
     private AuditLogRepository auditLogRepository;
+
+    // Other tests record audit entries that are committed (the audit log writes in its own transaction), so
+    // start from an empty table; this delete is rolled back with the rest of the test.
+    @BeforeEach
+    void startFromAnEmptyLog() {
+        auditLogRepository.deleteAll();
+        auditLogRepository.flush();
+    }
 
     private AuditLog saveLog(String username, String action, String entityType, String details) {
 

@@ -29,9 +29,11 @@ class PaymentServiceHandoverTest {
     private EmployeeRepository employeeRepository;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private RowLockService rowLockService;
 
     private PaymentService newService() {
-        return new PaymentService(paymentRepository, salesInvoiceRepository, employeeRepository, auditLogService);
+        return new PaymentService(paymentRepository, salesInvoiceRepository, employeeRepository, auditLogService, rowLockService);
     }
 
     @Test
@@ -80,8 +82,10 @@ class PaymentServiceHandoverTest {
         LocalDate date = LocalDate.of(2026, 9, 18);
 
         Payment payment1 = new Payment();
+        payment1.setPaymentMethod("CASH");
         payment1.setHandoverStatus("PENDING");
         Payment payment2 = new Payment();
+        payment2.setPaymentMethod("CHEQUE");
         payment2.setHandoverStatus("PENDING");
 
         when(paymentRepository.findByCollectedByEmployeeIdAndPaymentDate(1L, date))
