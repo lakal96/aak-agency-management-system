@@ -69,10 +69,15 @@ public class DeliveryTripApiController {
 
     @PutMapping("/{id}")
     public DeliveryTripResponse update(@PathVariable Long id, @Valid @RequestBody DeliveryTripRequest request) {
-        DeliveryTrip trip = deliveryTripService.getTripById(id)
-                .orElseThrow(() -> new NoSuchElementException("Delivery trip not found."));
-        applyRequest(trip, request);
-        return new DeliveryTripResponse(deliveryTripService.saveTrip(trip));
+        if (!deliveryTripService.tripExists(id)) {
+            throw new NoSuchElementException("Delivery trip not found.");
+        }
+        // A fresh object carrying the new values: the service loads (and locks) the real trip itself,
+        // so it can compare against the stored status instead of the already-edited one.
+        DeliveryTrip changes = new DeliveryTrip();
+        changes.setId(id);
+        applyRequest(changes, request);
+        return new DeliveryTripResponse(deliveryTripService.saveTrip(changes));
     }
 
     @PostMapping("/{id}/invoices/{invoiceId}")
