@@ -10,6 +10,7 @@ import lk.aak.agency.model.ShopReturn;
 import lk.aak.agency.service.ShopReturnService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.NoSuchElementException;
@@ -40,11 +41,13 @@ public class ShopReturnApiController {
         return new ShopReturnDetailResponse(new ShopReturnResponse(shopReturn), items);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/approve")
     public void approve(@PathVariable Long id) {
         shopReturnService.approveReturn(id);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/reject")
     public void reject(@PathVariable Long id) {
         shopReturnService.rejectReturn(id);

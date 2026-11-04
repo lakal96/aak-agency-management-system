@@ -67,11 +67,25 @@ public class ApiSecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         /*
+                         * Who am I / change my password: every logged-in user needs these,
+                         * whatever their role (a driver's login can still change its password).
+                         */
+                        .requestMatchers("/api/auth/**").authenticated()
+                        /*
                          * Scanning a shop's QR code without being logged in only returns the shop
                          * name - no other customer data is exposed on this public path.
                          */
                         .requestMatchers("/api/v1/customers/scan/*/preview").permitAll()
                         .requestMatchers("/api/v1/users/**", "/api/v1/audit-log/**").hasRole("ADMIN")
+                        /*
+                         * Approving or rejecting a return changes stock and what is owed, so it is
+                         * the owner's decision (same as the old screens). Listed before the
+                         * office rule below; office can still create returns and add items.
+                         */
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/shop-returns/*/approve", "/api/v1/shop-returns/*/reject",
+                                "/api/v1/supplier-returns/*/approve", "/api/v1/supplier-returns/*/reject")
+                        .hasRole("ADMIN")
                         .requestMatchers("/api/v1/customers/**", "/api/v1/sales-invoices/**")
                         .hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
                         /*
@@ -99,7 +113,13 @@ public class ApiSecurityConfig {
                                 "/api/v1/delivery-trips/**",
                                 "/api/v1/reports/**"
                         ).hasAnyRole("ADMIN", "OFFICE")
-                        .anyRequest().authenticated()
+                        /*
+                         * Anything under /api/v1 not listed above (the dashboard, anything added
+                         * later) is for the three working roles only - never a DRIVER, a mistyped
+                         * role or an unknown one. Everything else is closed.
+                         */
+                        .requestMatchers("/api/v1/**").hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
+                        .anyRequest().denyAll()
                 )
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint((request, response, authException) -> {

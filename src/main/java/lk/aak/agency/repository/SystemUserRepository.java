@@ -12,6 +12,10 @@ public interface SystemUserRepository
             String username
     );
 
+    java.util.List<SystemUser> findAllByUsernameIgnoreCase(
+            String username
+    );
+
     boolean existsByUsername(
             String username
     );

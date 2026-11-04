@@ -135,10 +135,15 @@ public class CustomerApiController {
     }
 
     @GetMapping("/scan/{qrCode}")
-    public CustomerResponse scan(@PathVariable String qrCode) {
-        return customerService.getCustomerByQrCode(qrCode)
-                .map(CustomerResponse::new)
+    public CustomerResponse scan(@PathVariable String qrCode, Authentication authentication) {
+        Customer customer = customerService.getCustomerByQrCode(qrCode)
                 .orElseThrow(() -> new NoSuchElementException("No shop matches this QR code."));
+        // A rep scanning another rep's shop gets the same answer as an unknown code.
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+            throw new NoSuchElementException("No shop matches this QR code.");
+        }
+        return new CustomerResponse(customer);
     }
 
     /** Public (unauthenticated) preview for a scanned shop QR - shop name only, nothing else. */
@@ -210,7 +215,10 @@ public class CustomerApiController {
      * proposal's own wording for the Credit Follow-up report the owner needs.
      */
     @GetMapping("/credit-followup")
-    public CreditFollowUpResponse creditFollowUp() {
+    public CreditFollowUpResponse creditFollowUp(Authentication authentication) {
+
+        // A sales rep sees only the shops assigned to them (an unlinked rep sees none).
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
 
         LocalDate today = LocalDate.now(SRI_LANKA_TIME_ZONE);
         List<CreditFollowUpRowResponse> rows = new ArrayList<>();
@@ -218,6 +226,10 @@ public class CustomerApiController {
         BigDecimal totalOverdue = BigDecimal.ZERO;
 
         for (Customer customer : customerService.getAllCustomers()) {
+
+            if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+                continue;
+            }
 
             List<SalesInvoice> creditInvoices = salesInvoiceRepository
                     .findByCustomerIdOrderByInvoiceDateDesc(customer.getId()).stream()

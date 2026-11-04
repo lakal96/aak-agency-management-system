@@ -139,4 +139,46 @@ class RoleBasedAccessControlTest {
     void officeRole_isForbiddenFromAuditLog() throws Exception {
         mockMvc.perform(get("/audit-log").with(user("office1").roles("OFFICE"))).andExpect(status().isForbidden());
     }
+
+    // ---- REST API (/api/**): role checks the old screens-only tests above do not cover
+
+    @Test
+    void api_driverAndUnknownRolesAreForbiddenFromTheDashboardAndEverythingElseUnderV1() throws Exception {
+        for (String role : new String[]{"DRIVER", "FOO"}) {
+            mockMvc.perform(get("/api/v1/dashboard/summary").with(user("x").roles(role))).andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/v1/dashboard/overview").with(user("x").roles(role))).andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/v1/customers").with(user("x").roles(role))).andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/v1/not-a-real-thing").with(user("x").roles(role))).andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void api_anonymousIsRefusedWith401() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/summary")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/not-a-real-thing")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void api_workingRolesStillReachTheDashboard() throws Exception {
+        for (String role : new String[]{"ADMIN", "OFFICE", "SALES_REP"}) {
+            mockMvc.perform(get("/api/v1/dashboard/summary").with(user("x").roles(role))).andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void api_everyRoleCanAskWhoItIsOrChangeItsPassword() throws Exception {
+        mockMvc.perform(get("/api/auth/me").with(user("nobody-in-db").roles("DRIVER")))
+                .andExpect(status().isUnauthorized()); // reaches the controller (user is not in the DB), not a 403
+    }
+
+    @Test
+    void api_officeCannotApproveOrRejectReturns_butOwnerCan() throws Exception {
+        for (String url : new String[]{"/api/v1/shop-returns/1/approve", "/api/v1/shop-returns/1/reject",
+                "/api/v1/supplier-returns/1/approve", "/api/v1/supplier-returns/1/reject"}) {
+            mockMvc.perform(post(url).with(user("office1").roles("OFFICE"))).andExpect(status().isForbidden());
+            int ownerStatus = mockMvc.perform(post(url).with(user("admin1").roles("ADMIN")))
+                    .andReturn().getResponse().getStatus();
+            org.assertj.core.api.Assertions.assertThat(ownerStatus).isNotIn(401, 403);
+        }
+    }
 }

@@ -4,6 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lk.aak.agency.model.SystemUser;
+import lk.aak.agency.repository.SystemUserRepository;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -13,17 +15,29 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
-/** Reads the "Authorization: Bearer <token>" header and populates the security context. */
+/**
+ * Reads the "Authorization: Bearer <token>" header and populates the security context.
+ *
+ * <p>The token only proves who the caller is. What they may do is decided by the user record as
+ * it is right now, looked up on every request (nothing is cached): a user who has been disabled
+ * or deleted loses access immediately instead of when the 15-minute token runs out, and
+ * a changed role takes effect at once - the role inside the token is never trusted. A failed-login
+ * lock deliberately does NOT end a session already in progress (a stranger guessing the owner's
+ * password must not be able to evict the owner); it only blocks new logins and refreshes.
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final SystemUserRepository systemUserRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, SystemUserRepository systemUserRepository) {
         this.jwtService = jwtService;
+        this.systemUserRepository = systemUserRepository;
     }
 
     @Override
@@ -42,13 +56,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 String username = jwtService.extractUsername(token);
 
-                List<SimpleGrantedAuthority> authorities = jwtService.extractRoles(token).stream()
-                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                        .toList();
+                Optional<SystemUser> current = systemUserRepository.findByUsername(username)
+                        .filter(SystemUser::isEnabled);
 
-                var authentication = new UsernamePasswordAuthenticationToken(username, null, authorities);
+                if (current.isPresent()) {
 
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                    List<SimpleGrantedAuthority> authorities =
+                            List.of(new SimpleGrantedAuthority("ROLE_" + current.get().getRole()));
+
+                    var authentication = new UsernamePasswordAuthenticationToken(
+                            current.get().getUsername(), null, authorities);
+
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         }
 

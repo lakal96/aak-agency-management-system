@@ -2,6 +2,7 @@ package lk.aak.agency.controller;
 
 import jakarta.validation.Valid;
 import lk.aak.agency.model.Employee;
+import lk.aak.agency.service.EmployeeLoginAccessService;
 import lk.aak.agency.service.EmployeeService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -17,9 +18,12 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class EmployeeController {
 
     private final EmployeeService employeeService;
+    private final EmployeeLoginAccessService employeeLoginAccessService;
 
-    public EmployeeController(EmployeeService employeeService) {
+    public EmployeeController(
+            EmployeeService employeeService, EmployeeLoginAccessService employeeLoginAccessService) {
         this.employeeService = employeeService;
+        this.employeeLoginAccessService = employeeLoginAccessService;
     }
 
     @GetMapping
@@ -68,7 +72,12 @@ public class EmployeeController {
             return "employees/employee-form";
         }
 
-        employeeService.saveEmployee(employee);
+        String previousStatus = employee.getId() == null
+                ? null
+                : employeeService.getEmployeeById(employee.getId()).map(Employee::getStatus).orElse(null);
+
+        Employee saved = employeeService.saveEmployee(employee);
+        employeeLoginAccessService.onEmployeeSaved(previousStatus, saved);
 
         redirectAttributes.addFlashAttribute("successMessage", "Employee saved successfully.");
         return "redirect:/employees";

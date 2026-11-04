@@ -8,8 +8,11 @@ import lk.aak.agency.dto.api.LoginRequest;
 import lk.aak.agency.model.SystemUser;
 import lk.aak.agency.repository.SystemUserRepository;
 import lk.aak.agency.security.LoginAttemptService;
+import lk.aak.agency.service.UserManagementService;
 import lk.aak.agency.security.jwt.JwtService;
 import lk.aak.agency.security.jwt.RefreshTokenService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -17,7 +20,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
-import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +32,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthApiController {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AuthApiController.class);
 
     private static final String REFRESH_COOKIE_NAME = "refreshToken";
 
@@ -65,7 +69,11 @@ public class AuthApiController {
             HttpServletResponse response) {
 
         if (loginAttemptService.isLocked(request.getUsername())) {
-            throw new LockedException("This account is temporarily locked due to repeated failed logins.");
+            // Same answer as an unknown username, so the response never reveals which usernames
+            // exist. The reason is in the server log, and the owner can unlock the account on the
+            // Users page (POST /api/v1/users/{id}/unlock) or it frees itself after 15 minutes.
+            LOGGER.warn("Login refused: account \"{}\" is locked after repeated failed logins.", request.getUsername());
+            throw new BadCredentialsException("Invalid username or password.");
         }
 
         try {
@@ -100,6 +108,11 @@ public class AuthApiController {
             throw new DisabledException("This account has been disabled.");
         }
 
+        // A lock blocks new sessions (login and refresh) but not one already in progress.
+        if (loginAttemptService.isLocked(user.getUsername())) {
+            throw new BadCredentialsException("Refresh token is invalid or has expired.");
+        }
+
         return issueTokens(user, response);
     }
 
@@ -126,7 +139,8 @@ public class AuthApiController {
     @PostMapping("/change-password")
     public ResponseEntity<Void> changePassword(
             @jakarta.validation.Valid @RequestBody ChangePasswordRequest request,
-            org.springframework.security.core.Authentication authentication) {
+            org.springframework.security.core.Authentication authentication,
+            HttpServletResponse response) {
 
         SystemUser user = systemUserRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new BadCredentialsException("User account was not found."));
@@ -139,8 +153,15 @@ public class AuthApiController {
             throw new IllegalArgumentException("New password and confirmation do not match.");
         }
 
+        UserManagementService.requireValidPassword(request.getNewPassword());
+
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         systemUserRepository.save(user);
+
+        // Anyone else holding a session for this account (a stolen or forgotten browser) is signed
+        // out; this browser gets a fresh one so the person changing the password is not kicked out.
+        refreshTokenService.revokeAllFor(user.getUsername());
+        setRefreshCookie(response, refreshTokenService.issue(user.getUsername()));
 
         return ResponseEntity.noContent().build();
     }
