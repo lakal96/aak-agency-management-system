@@ -75,8 +75,8 @@ public class CustomerCreditController {
                 .filter(invoice -> "COMPLETED".equalsIgnoreCase(
                         invoice.getStatus()
                 ))
-                .filter(invoice -> "CREDIT".equalsIgnoreCase(
-                        invoice.getSaleType()
+                .filter(invoice -> PaymentService.isOwedSale(
+                        invoice, paymentService.getPaidAmount(invoice.getId())
                 ))
                 .toList();
 
@@ -156,7 +156,7 @@ public class CustomerCreditController {
                     .findByCustomerIdOrderByInvoiceDateDesc(customer.getId())
                     .stream()
                     .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
-                    .filter(invoice -> "CREDIT".equalsIgnoreCase(invoice.getSaleType()))
+                    .filter(invoice -> PaymentService.isOwedSale(invoice, paymentService.getPaidAmount(invoice.getId())))
                     .toList();
 
             BigDecimal customerOutstanding = BigDecimal.ZERO;

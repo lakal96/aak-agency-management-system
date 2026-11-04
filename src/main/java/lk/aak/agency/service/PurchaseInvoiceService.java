@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -25,13 +26,16 @@ public class PurchaseInvoiceService {
     private final PurchaseInvoiceItemRepository purchaseInvoiceItemRepository;
     private final StockMovementRepository stockMovementRepository;
     private final AuditLogService auditLogService;
+    private final RowLockService rowLockService;
 
     public PurchaseInvoiceService(
             PurchaseInvoiceRepository purchaseInvoiceRepository,
             PurchaseInvoiceItemRepository purchaseInvoiceItemRepository,
             StockMovementRepository stockMovementRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            RowLockService rowLockService) {
 
+        this.rowLockService = rowLockService;
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
         this.purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
         this.stockMovementRepository = stockMovementRepository;
@@ -107,7 +111,12 @@ public class PurchaseInvoiceService {
         return purchaseInvoiceRepository.save(purchaseInvoice);
     }
 
-    @Transactional
+    /*
+     * READ_COMMITTED + a row lock on the invoice: an edit racing a "complete" can no longer
+     * re-save a stale DRAFT status over a completed invoice (stock would move while the
+     * invoice showed different quantities).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public PurchaseInvoice saveInvoiceWithItems(
             PurchaseInvoice purchaseInvoice,
             List<PurchaseInvoiceItem> items) {
@@ -118,7 +127,34 @@ public class PurchaseInvoiceService {
             );
         }
 
-        validateInvoiceCanBeSaved(purchaseInvoice);
+        if (purchaseInvoice != null && purchaseInvoice.getId() != null) {
+
+            Long invoiceId = purchaseInvoice.getId();
+
+            // Lock FIRST, then read the invoice as it is now: the caller's copy may be stale.
+            rowLockService.forget(purchaseInvoice);
+            rowLockService.lockPurchaseInvoice(invoiceId);
+
+            PurchaseInvoice existingInvoice = getInvoiceById(invoiceId);
+
+            if ("COMPLETED".equalsIgnoreCase(existingInvoice.getStatus())) {
+                throw new IllegalArgumentException(
+                        "A completed purchase invoice cannot be edited."
+                );
+            }
+
+            validateInvoiceCanBeSaved(purchaseInvoice);
+
+            if (existingInvoice != purchaseInvoice) {
+                copyEditableFields(purchaseInvoice, existingInvoice);
+            }
+
+            purchaseInvoice = existingInvoice;
+
+        } else {
+            validateInvoiceCanBeSaved(purchaseInvoice);
+        }
+
         setInvoiceDefaults(purchaseInvoice);
         resetVerification(purchaseInvoice);
 
@@ -182,7 +218,7 @@ public class PurchaseInvoiceService {
         return savedInvoice;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public PurchaseInvoiceItem saveItem(
             PurchaseInvoiceItem item) {
 
@@ -195,8 +231,10 @@ public class PurchaseInvoiceService {
             );
         }
 
+        rowLockService.lockPurchaseInvoice(invoice.getId());
+
         if ("COMPLETED".equalsIgnoreCase(
-                invoice.getStatus())) {
+                getInvoiceById(invoice.getId()).getStatus())) {
 
             throw new IllegalArgumentException(
                     "Products cannot be added to a completed invoice."
@@ -218,7 +256,7 @@ public class PurchaseInvoiceService {
         return savedItem;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteItem(Long itemId) {
 
         PurchaseInvoiceItem item =
@@ -230,8 +268,11 @@ public class PurchaseInvoiceService {
                                 )
                         );
 
-        PurchaseInvoice invoice =
-                item.getPurchaseInvoice();
+        Long invoiceId = item.getPurchaseInvoice().getId();
+
+        rowLockService.lockPurchaseInvoice(invoiceId);
+
+        PurchaseInvoice invoice = getInvoiceById(invoiceId);
 
         if ("COMPLETED".equalsIgnoreCase(
                 invoice.getStatus())) {
@@ -241,8 +282,6 @@ public class PurchaseInvoiceService {
             );
         }
 
-        Long invoiceId = invoice.getId();
-
         purchaseInvoiceItemRepository.deleteById(itemId);
         purchaseInvoiceItemRepository.flush();
 
@@ -250,10 +289,14 @@ public class PurchaseInvoiceService {
         recalculateInvoiceTotals(invoiceId);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void completeInvoice(
             Long invoiceId,
             boolean verificationConfirmed) {
+
+        // Serialise with edits, file uploads and a second "complete": the later caller waits here
+        // and then sees the final status instead of racing the first one.
+        rowLockService.lockPurchaseInvoice(invoiceId);
 
         PurchaseInvoice invoice =
                 getInvoiceById(invoiceId);
@@ -354,8 +397,10 @@ public class PurchaseInvoiceService {
         completeInvoice(invoiceId, false);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteInvoice(Long invoiceId) {
+
+        rowLockService.lockPurchaseInvoice(invoiceId);
 
         PurchaseInvoice invoice =
                 getInvoiceById(invoiceId);
@@ -379,6 +424,78 @@ public class PurchaseInvoiceService {
                 "PURCHASE_INVOICE_DELETED", "PurchaseInvoice", invoiceId,
                 "Deleted purchase invoice \"" + invoice.getDocumentNumber() + "\""
         );
+    }
+
+    /** What replacing the original CBL invoice file produced: the saved invoice and the old stored file to delete. */
+    public record FileReplacement(PurchaseInvoice invoice, String previousStoredFileName) {
+    }
+
+    /**
+     * Attaches (or replaces) the scanned original CBL invoice. Under the invoice row lock; once the
+     * invoice is completed (verified against that very document) the file can no longer be replaced.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public FileReplacement attachInvoiceFile(
+            Long invoiceId, PurchaseInvoiceFileService.StoredInvoiceFile storedFile) {
+
+        rowLockService.lockPurchaseInvoice(invoiceId);
+
+        PurchaseInvoice invoice = getInvoiceById(invoiceId);
+
+        requireFileCanBeReplaced(invoice);
+
+        String previousStoredFileName = invoice.getInvoiceFileStoredName();
+
+        invoice.setInvoiceFileOriginalName(storedFile.originalFileName());
+        invoice.setInvoiceFileStoredName(storedFile.storedFileName());
+        invoice.setInvoiceFileContentType(storedFile.contentType());
+        invoice.setInvoiceFileSize(storedFile.fileSize());
+        invoice.setInvoiceFileUploadedAt(BusinessTime.now());
+
+        // A different document means any earlier verification no longer applies.
+        resetVerification(invoice);
+
+        return new FileReplacement(purchaseInvoiceRepository.save(invoice), previousStoredFileName);
+    }
+
+    /** Cheap early check so a refused upload is not written to disk at all. */
+    public void requireFileCanBeReplaced(PurchaseInvoice invoice) {
+
+        if ("COMPLETED".equalsIgnoreCase(invoice.getStatus()) || invoice.isInvoiceVerified()) {
+            throw new IllegalArgumentException(
+                    "This purchase invoice is already completed and verified against the original "
+                            + "CBL document, so the file cannot be replaced."
+            );
+        }
+    }
+
+    private void copyEditableFields(PurchaseInvoice from, PurchaseInvoice to) {
+
+        to.setDocumentNumber(from.getDocumentNumber());
+        to.setTaxInvoiceNumber(from.getTaxInvoiceNumber());
+        to.setPoNumber(from.getPoNumber());
+        to.setInvoiceDate(from.getInvoiceDate());
+        to.setDeliveryDate(from.getDeliveryDate());
+        to.setSupplierName(from.getSupplierName());
+        to.setTerritory(from.getTerritory());
+        to.setPlaceOfSupply(from.getPlaceOfSupply());
+        to.setDiscountAmount(from.getDiscountAmount());
+        to.setVatAmount(from.getVatAmount());
+        to.setPaymentMethod(from.getPaymentMethod());
+        to.setNotes(from.getNotes());
+
+        // The old Thymeleaf form carries a newly uploaded file on the invoice it submits. Take the
+        // file only if it is newer than what is stored (a stale copy must not undo a later upload).
+        if (from.getInvoiceFileUploadedAt() != null
+                && (to.getInvoiceFileUploadedAt() == null
+                || from.getInvoiceFileUploadedAt().isAfter(to.getInvoiceFileUploadedAt()))) {
+
+            to.setInvoiceFileOriginalName(from.getInvoiceFileOriginalName());
+            to.setInvoiceFileStoredName(from.getInvoiceFileStoredName());
+            to.setInvoiceFileContentType(from.getInvoiceFileContentType());
+            to.setInvoiceFileSize(from.getInvoiceFileSize());
+            to.setInvoiceFileUploadedAt(from.getInvoiceFileUploadedAt());
+        }
     }
 
     private void validateInvoiceCanBeSaved(

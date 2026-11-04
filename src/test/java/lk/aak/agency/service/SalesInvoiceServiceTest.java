@@ -136,7 +136,7 @@ class SalesInvoiceServiceTest {
     }
 
     @Test
-    void completeInvoice_allowsCashSaleRegardlessOfCreditLimit() {
+    void completeInvoice_allowsCashSaleRegardlessOfCreditLimit_andLeavesItUnpaidUntilCashIsRecorded() {
 
         SalesInvoiceService service = newService();
 
@@ -163,6 +163,7 @@ class SalesInvoiceServiceTest {
         service.completeInvoice(6L);
 
         assertThat(invoice.getStatus()).isEqualTo("COMPLETED");
-        assertThat(invoice.getPaymentStatus()).isEqualTo("PAID");
+        // Owner decision: the office records the cash, so a cash bill is a receivable (UNPAID) until then.
+        assertThat(invoice.getPaymentStatus()).isEqualTo("UNPAID");
     }
 }

@@ -27,7 +27,9 @@ public class AuditLogService {
             auditLog.setAction(action);
             auditLog.setEntityType(entityType);
             auditLog.setEntityId(entityId);
-            auditLog.setDetails(details);
+            // The column holds 500 characters; a longer text would fail later, at commit, and take the
+            // business change down with it - the try/catch below cannot catch that.
+            auditLog.setDetails(details != null && details.length() > 500 ? details.substring(0, 500) : details);
 
             auditLogRepository.save(auditLog);
 

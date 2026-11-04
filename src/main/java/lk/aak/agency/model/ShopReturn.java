@@ -45,6 +45,15 @@ public class ShopReturn {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    // Filled in on approval. creditApplied = what was taken off the bill (a CREDIT_NOTE payment);
+    // refundDue = the part of the returned goods' value that the shop had already paid for (no refund is
+    // created automatically). Both stay null for returns approved before credits existed.
+    @Column(name = "credit_applied_amount", precision = 15, scale = 2)
+    private java.math.BigDecimal creditAppliedAmount;
+
+    @Column(name = "refund_due_amount", precision = 15, scale = 2)
+    private java.math.BigDecimal refundDueAmount;
+
     public ShopReturn() {
     }
 
@@ -134,5 +143,21 @@ public class ShopReturn {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public java.math.BigDecimal getCreditAppliedAmount() {
+        return creditAppliedAmount;
+    }
+
+    public void setCreditAppliedAmount(java.math.BigDecimal creditAppliedAmount) {
+        this.creditAppliedAmount = creditAppliedAmount;
+    }
+
+    public java.math.BigDecimal getRefundDueAmount() {
+        return refundDueAmount;
+    }
+
+    public void setRefundDueAmount(java.math.BigDecimal refundDueAmount) {
+        this.refundDueAmount = refundDueAmount;
     }
 }

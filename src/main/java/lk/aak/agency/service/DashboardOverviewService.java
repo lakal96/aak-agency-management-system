@@ -90,7 +90,7 @@ public class DashboardOverviewService {
                 sales,
                 orders,
                 buyers,
-                categories(rangeStart, rangeEnd, employeeId),
+                categories(rangeStart, rangeEnd, employeeId, sales.value()),
                 deliveries(today, employeeId));
     }
 
@@ -149,11 +149,25 @@ public class DashboardOverviewService {
     }
 
     /** The biggest categories by name, everything smaller rolled into "Others". */
-    private List<CategorySale> categories(LocalDate from, LocalDate to, Long employeeId) {
+    private List<CategorySale> categories(LocalDate from, LocalDate to, Long employeeId, BigDecimal netSales) {
 
-        List<Object[]> rows = new ArrayList<>(salesInvoiceItemRepository.completedSalesByCategory(from, to, employeeId));
+        List<Object[]> rows = new ArrayList<>();
+        for (Object[] row : salesInvoiceItemRepository.completedSalesByCategory(from, to, employeeId)) {
+            rows.add(new Object[] {row[0], ((BigDecimal) row[1]).setScale(2, RoundingMode.HALF_UP)});
+        }
         rows.removeIf(row -> ((BigDecimal) row[1]).signum() <= 0);
         rows.sort(Comparator.comparing((Object[] row) -> (BigDecimal) row[1]).reversed());
+
+        // Each category is rounded to the cent, so the sum can be a few cents off the net sales figure:
+        // put that rounding difference on the biggest category so the categories add up exactly. A larger
+        // gap is real (a data problem) and is left visible rather than hidden.
+        if (!rows.isEmpty()) {
+            BigDecimal sum = rows.stream().map(row -> (BigDecimal) row[1]).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal difference = netSales.subtract(sum);
+            if (difference.signum() != 0 && difference.abs().compareTo(new BigDecimal("0.50")) <= 0) {
+                rows.get(0)[1] = ((BigDecimal) rows.get(0)[1]).add(difference);
+            }
+        }
 
         BigDecimal total = rows.stream().map(row -> (BigDecimal) row[1]).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (total.signum() == 0) {
