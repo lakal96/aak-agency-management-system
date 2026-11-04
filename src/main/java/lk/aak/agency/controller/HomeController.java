@@ -344,10 +344,13 @@ public class HomeController {
                         invoice.getStatus()
                 );
 
+        // A completed CASH bill is owed until the office records the cash (old ones were marked PAID).
         boolean isCreditSale =
                 "CREDIT".equalsIgnoreCase(
                         invoice.getSaleType()
-                );
+                )
+                        || ("CASH".equalsIgnoreCase(invoice.getSaleType())
+                        && !"PAID".equalsIgnoreCase(invoice.getPaymentStatus()));
 
         return isCompleted && isCreditSale;
     }
