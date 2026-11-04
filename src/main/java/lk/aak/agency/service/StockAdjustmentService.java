@@ -18,6 +18,11 @@ import java.util.List;
 @Service
 public class StockAdjustmentService {
 
+    private static final BigDecimal MAX_ADJUSTMENT_QUANTITY =
+            new BigDecimal("1000000");
+
+    private static final int MAX_NOTE_LENGTH = 1000;
+
     private final StockAdjustmentRepository
             stockAdjustmentRepository;
 
@@ -133,6 +138,46 @@ public class StockAdjustmentService {
             throw new IllegalArgumentException(
                     "Adjustment quantity must be greater than zero."
             );
+        }
+
+        if (quantity.compareTo(MAX_ADJUSTMENT_QUANTITY) >= 0) {
+
+            throw new IllegalArgumentException(
+                    "Adjustment quantity is too large - please check the number "
+                            + "(the most allowed is 999,999)."
+            );
+        }
+
+        if (adjustment.getNotes() == null
+                || adjustment.getNotes().isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Please write a short note saying why the stock is changing "
+                            + "(for example: 3 packets damaged in the store)."
+            );
+        }
+
+        if (adjustment.getNotes().trim().length() > MAX_NOTE_LENGTH) {
+
+            throw new IllegalArgumentException(
+                    "The note is too long (the most allowed is "
+                            + MAX_NOTE_LENGTH + " characters)."
+            );
+        }
+
+        if ("OPENING_STOCK".equals(adjustmentType)) {
+
+            // Lock first so two opening-stock entries for one product cannot both pass the check.
+            rowLockService.lockProducts(java.util.List.of(product.getId()));
+
+            if (stockMovementRepository.existsByProductId(product.getId())) {
+
+                throw new IllegalArgumentException(
+                        "Opening stock can only be entered for a product that has no stock "
+                                + "movements yet. This product already has stock history - "
+                                + "use a stock correction (in or out) instead."
+                );
+            }
         }
 
         if ("OUT".equals(direction)) {

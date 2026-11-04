@@ -94,7 +94,8 @@ public class PurchaseInvoiceItem {
             unit = unit.trim().toUpperCase();
         }
 
-        amount = quantity.multiply(unitPrice);
+        // Two decimals, so draft and completed totals always agree with what is stored.
+        amount = quantity.multiply(unitPrice).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     public void calculateAmount() {
