@@ -9,6 +9,7 @@ public class UserResponse {
     private final String fullName;
     private final String role;
     private final boolean enabled;
+    private final boolean locked;
 
     public UserResponse(SystemUser user) {
         this.id = user.getId();
@@ -16,6 +17,8 @@ public class UserResponse {
         this.fullName = user.getFullName();
         this.role = user.getRole();
         this.enabled = user.isEnabled();
+        this.locked = user.getLockedUntil() != null
+                && lk.aak.agency.util.BusinessTime.now().isBefore(user.getLockedUntil());
     }
 
     public Long getId() {
@@ -36,5 +39,10 @@ public class UserResponse {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    /** True while the account is locked after too many wrong passwords (use POST /{id}/unlock). */
+    public boolean isLocked() {
+        return locked;
     }
 }

@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lk.aak.agency.dto.api.EmployeeRequest;
 import lk.aak.agency.dto.api.EmployeeResponse;
 import lk.aak.agency.model.Employee;
+import lk.aak.agency.service.EmployeeLoginAccessService;
 import lk.aak.agency.service.EmployeeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,9 +18,12 @@ import java.util.NoSuchElementException;
 public class EmployeeApiController {
 
     private final EmployeeService employeeService;
+    private final EmployeeLoginAccessService employeeLoginAccessService;
 
-    public EmployeeApiController(EmployeeService employeeService) {
+    public EmployeeApiController(
+            EmployeeService employeeService, EmployeeLoginAccessService employeeLoginAccessService) {
         this.employeeService = employeeService;
+        this.employeeLoginAccessService = employeeLoginAccessService;
     }
 
     @GetMapping
@@ -38,15 +42,20 @@ public class EmployeeApiController {
     public ResponseEntity<EmployeeResponse> create(@Valid @RequestBody EmployeeRequest request) {
         Employee employee = new Employee();
         applyRequest(employee, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new EmployeeResponse(employeeService.saveEmployee(employee)));
+        Employee saved = employeeService.saveEmployee(employee);
+        employeeLoginAccessService.onEmployeeSaved(null, saved);
+        return ResponseEntity.status(HttpStatus.CREATED).body(new EmployeeResponse(saved));
     }
 
     @PutMapping("/{id}")
     public EmployeeResponse update(@PathVariable Long id, @Valid @RequestBody EmployeeRequest request) {
         Employee employee = employeeService.getEmployeeById(id)
                 .orElseThrow(() -> new NoSuchElementException("Employee not found."));
+        String previousStatus = employee.getStatus();
         applyRequest(employee, request);
-        return new EmployeeResponse(employeeService.saveEmployee(employee));
+        Employee saved = employeeService.saveEmployee(employee);
+        employeeLoginAccessService.onEmployeeSaved(previousStatus, saved);
+        return new EmployeeResponse(saved);
     }
 
     @PreAuthorize("hasRole('ADMIN')")

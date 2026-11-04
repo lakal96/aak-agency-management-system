@@ -10,6 +10,7 @@ import lk.aak.agency.model.SupplierReturn;
 import lk.aak.agency.service.SupplierReturnService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.NoSuchElementException;
@@ -41,11 +42,13 @@ public class SupplierReturnApiController {
         return new SupplierReturnDetailResponse(new SupplierReturnResponse(supplierReturn), items);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/approve")
     public void approve(@PathVariable Long id) {
         supplierReturnService.approveReturn(id);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/reject")
     public void reject(@PathVariable Long id) {
         supplierReturnService.rejectReturn(id);

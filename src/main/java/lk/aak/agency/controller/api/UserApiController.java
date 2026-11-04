@@ -52,6 +52,13 @@ public class UserApiController {
         return ResponseEntity.status(HttpStatus.CREATED).body(new UserResponse(user));
     }
 
+    /** Lets someone who is locked out (5 wrong passwords) try again without waiting 15 minutes. */
+    @PostMapping("/{id}/unlock")
+    public ResponseEntity<Void> unlock(@PathVariable Long id) {
+        userManagementService.unlockUser(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PutMapping("/{id}")
     public UserResponse update(@PathVariable Long id, @Valid @RequestBody UserRequest request) {
 

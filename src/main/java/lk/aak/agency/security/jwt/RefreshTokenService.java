@@ -91,6 +91,19 @@ public class RefreshTokenService {
                 });
     }
 
+    /** Signs the user out everywhere: every refresh token they hold stops working. */
+    @Transactional
+    public void revokeAllFor(String username) {
+
+        if (username == null || username.isBlank()) {
+            return;
+        }
+
+        var active = refreshTokenRepository.findByUsernameAndRevokedFalse(username);
+        active.forEach(token -> token.setRevoked(true));
+        refreshTokenRepository.saveAll(active);
+    }
+
     public long refreshTokenDays() {
         return refreshTokenDays;
     }

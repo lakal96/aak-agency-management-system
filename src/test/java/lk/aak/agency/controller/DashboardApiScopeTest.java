@@ -188,4 +188,28 @@ class DashboardApiScopeTest {
         assertThat(summary.getOutstandingReceivables()).isEqualByComparingTo("6000");
         assertThat(summary.getOutstandingInvoiceCount()).isEqualTo(2);
     }
+
+    @Test
+    void aDriverOrUnknownRoleGetsTheRestrictedViewNeverTheFullOne() {
+
+        // the real scope service: any role other than ADMIN/OFFICE is scoped (here to nobody)
+        lk.aak.agency.repository.EmployeeRepository employeeRepository = org.mockito.Mockito.mock(
+                lk.aak.agency.repository.EmployeeRepository.class);
+        SalesRepScopeService realScope = new SalesRepScopeService(employeeRepository);
+        DashboardApiController failClosed = new DashboardApiController(
+                customerRepository, salesInvoiceRepository, productRepository, auditLogRepository,
+                paymentRepository, paymentService, inventoryService, supplierPaymentService, realScope);
+
+        for (String role : List.of("DRIVER", "FOO", "sales_rep")) {
+            DashboardSummaryResponse summary = failClosed.summary(auth(role));
+
+            assertThat(summary.getTodaySales()).as(role).isEqualByComparingTo("0");
+            assertThat(summary.getOutstandingReceivables()).as(role).isEqualByComparingTo("0");
+            assertThat(summary.getTotalCustomers()).as(role).isEqualTo(0);
+            assertThat(summary.getTotalOwedToSupplier()).as(role).isEqualByComparingTo("0");
+            assertThat(summary.getRecentActivity()).as(role).isEmpty();
+        }
+        verifyNoInteractions(supplierPaymentService);
+        verify(auditLogRepository, never()).search(any(), any());
+    }
 }

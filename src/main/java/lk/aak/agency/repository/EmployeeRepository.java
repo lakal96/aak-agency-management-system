@@ -15,4 +15,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     Optional<Employee> findByBiometricDeviceUserId(String biometricDeviceUserId);
 
     Optional<Employee> findBySystemUsername(String systemUsername);
+
+    /** Every employee linked to a login, ignoring case - normally one, but old data may hold duplicates. */
+    List<Employee> findAllBySystemUsernameIgnoreCase(String systemUsername);
 }

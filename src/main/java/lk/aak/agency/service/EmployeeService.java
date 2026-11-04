@@ -64,6 +64,8 @@ public class EmployeeService {
     }
 
     public Employee saveEmployee(Employee employee) {
+        requireLoginNotSharedWithAnotherEmployee(employee);
+
         if (employee.getId() == null
                 && (employee.getEmployeeCode() == null || employee.getEmployeeCode().isBlank())) {
 
@@ -71,6 +73,29 @@ public class EmployeeService {
         }
 
         return employeeRepository.save(employee);
+    }
+
+    /**
+     * One login belongs to one person: a rep's shops are found through the employee record linked
+     * to their login, so two records on the same login would mix two people's shops up.
+     * Compared ignoring case; a blank login means "no login" and is stored as empty.
+     */
+    private void requireLoginNotSharedWithAnotherEmployee(Employee employee) {
+
+        String login = employee.getSystemUsername() == null ? null : employee.getSystemUsername().trim();
+
+        if (login == null || login.isEmpty()) {
+            employee.setSystemUsername(null);
+            return;
+        }
+
+        employee.setSystemUsername(login);
+
+        for (Employee other : employeeRepository.findAllBySystemUsernameIgnoreCase(login)) {
+            if (employee.getId() == null || !employee.getId().equals(other.getId())) {
+                throw new IllegalArgumentException("That login is already linked to " + other.getFullName() + ".");
+            }
+        }
     }
 
     private String generateEmployeeCode() {

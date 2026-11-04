@@ -10,5 +10,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+    java.util.List<RefreshToken> findByUsernameAndRevokedFalse(String username);
+
     void deleteAllByExpiresAtBefore(LocalDateTime cutoff);
 }
