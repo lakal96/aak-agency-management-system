@@ -20,6 +20,7 @@ import lk.aak.agency.service.CustomerService;
 import lk.aak.agency.service.ExcelService;
 import lk.aak.agency.service.PaymentService;
 import lk.aak.agency.service.QrCodeService;
+import lk.aak.agency.service.ShopImportService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -52,7 +53,8 @@ public class CustomerApiController {
 
     private static final List<String> IMPORT_HEADERS = List.of(
             "Customer Name*", "Area", "Phone", "Address", "Contact Person",
-            "Credit Limit", "Payment Terms Days", "Customer Type", "Status", "Notes"
+            "Credit Limit", "Payment Terms Days", "Customer Type", "Status", "Notes",
+            ShopImportService.SALES_REP_HEADER
     );
 
     private final CustomerService customerService;
@@ -62,6 +64,7 @@ public class CustomerApiController {
     private final PaymentService paymentService;
     private final ExcelService excelService;
     private final SalesRepScopeService salesRepScopeService;
+    private final ShopImportService shopImportService;
 
     public CustomerApiController(
             CustomerService customerService,
@@ -70,7 +73,8 @@ public class CustomerApiController {
             PaymentRepository paymentRepository,
             PaymentService paymentService,
             ExcelService excelService,
-            SalesRepScopeService salesRepScopeService) {
+            SalesRepScopeService salesRepScopeService,
+            ShopImportService shopImportService) {
 
         this.customerService = customerService;
         this.qrCodeService = qrCodeService;
@@ -79,6 +83,7 @@ public class CustomerApiController {
         this.paymentService = paymentService;
         this.excelService = excelService;
         this.salesRepScopeService = salesRepScopeService;
+        this.shopImportService = shopImportService;
     }
 
     /** Hides a customer outside a SALES_REP's assigned scope by reporting it as not found. */
@@ -299,9 +304,15 @@ public class CustomerApiController {
         Customer customer = customerService.getCustomerById(id)
                 .orElseThrow(() -> new NoSuchElementException("Customer not found."));
 
+        BigDecimal oldCreditLimit = customer.getCreditLimit();
+        Integer oldPaymentTermsDays = customer.getPaymentTermsDays();
+
         applyRequest(customer, request);
 
-        return new CustomerResponse(customerService.saveCustomer(customer));
+        Customer saved = customerService.saveCustomer(customer);
+        customerService.recordCreditTermsChange(saved, oldCreditLimit, oldPaymentTermsDays, "edit");
+
+        return new CustomerResponse(saved);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -338,7 +349,7 @@ public class CustomerApiController {
         byte[] file = excelService.buildTemplate(
                 "Customers",
                 IMPORT_HEADERS,
-                List.of("Green Valley Store", "Colombo", "0771234567", "12 Main St", "Mr. Perera", "50000", "21", "RETAIL", "ACTIVE", "")
+                List.of("Green Valley Store", "Colombo", "0771234567", "12 Main St", "Mr. Perera", "50000", "21", "RETAIL", "ACTIVE", "", "")
         );
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"customers-import-template.xlsx\"")
@@ -349,71 +360,7 @@ public class CustomerApiController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/import")
     public ImportSummaryResponse importCustomers(@RequestParam("file") MultipartFile file) throws IOException {
-        List<Map<String, String>> rows = excelService.readRows(file.getInputStream());
-        List<ImportSummaryResponse.RowError> errors = new ArrayList<>();
-        int successCount = 0;
-
-        for (int i = 0; i < rows.size(); i++) {
-            int rowNumber = i + 2; // +1 for header row, +1 for 1-based row numbers
-            Map<String, String> row = rows.get(i);
-
-            try {
-                CustomerRequest request = new CustomerRequest();
-                request.setCustomerName(row.getOrDefault("Customer Name*", ""));
-                request.setArea(blankToNull(row.get("Area")));
-                request.setPhone(blankToNull(row.get("Phone")));
-                request.setAddress(blankToNull(row.get("Address")));
-                request.setContactPerson(blankToNull(row.get("Contact Person")));
-                request.setCreditLimit(parseDecimal(row.get("Credit Limit")));
-                request.setPaymentTermsDays(parseInt(row.get("Payment Terms Days")));
-                request.setCustomerType(blankToNull(row.get("Customer Type")));
-                request.setStatus(blankOr(row.get("Status"), "ACTIVE"));
-                request.setNotes(blankToNull(row.get("Notes")));
-
-                if (request.getCustomerName() == null || request.getCustomerName().isBlank()) {
-                    throw new IllegalArgumentException("Customer Name is required.");
-                }
-
-                Customer customer = new Customer();
-                applyRequest(customer, request);
-                customerService.saveCustomer(customer);
-                successCount++;
-            } catch (Exception e) {
-                errors.add(new ImportSummaryResponse.RowError(rowNumber, e.getMessage()));
-            }
-        }
-
-        return new ImportSummaryResponse(rows.size(), successCount, errors);
-    }
-
-    private String blankToNull(String value) {
-        return (value == null || value.isBlank()) ? null : value.trim();
-    }
-
-    private String blankOr(String value, String fallback) {
-        return (value == null || value.isBlank()) ? fallback : value.trim();
-    }
-
-    private BigDecimal parseDecimal(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return new BigDecimal(value.trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("\"" + value + "\" is not a valid number.");
-        }
-    }
-
-    private Integer parseInt(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return (int) Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("\"" + value + "\" is not a valid whole number.");
-        }
+        return shopImportService.importShops(file.getInputStream());
     }
 
     private BigDecimal zeroIfNull(BigDecimal value) {

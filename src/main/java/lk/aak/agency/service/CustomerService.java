@@ -9,7 +9,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -86,6 +90,34 @@ public class CustomerService {
         }
 
         return customerRepository.save(customer);
+    }
+
+    /**
+     * Audit-logs a change of credit limit or payment terms (old -> new); does nothing when neither
+     * changed. "source" says how it was changed, e.g. "edit" or "bulk import".
+     */
+    public void recordCreditTermsChange(
+            Customer customer, BigDecimal oldCreditLimit, Integer oldPaymentTermsDays, String source) {
+
+        List<String> changes = new ArrayList<>();
+
+        BigDecimal before = oldCreditLimit == null ? BigDecimal.ZERO : oldCreditLimit;
+        BigDecimal after = customer.getCreditLimit() == null ? BigDecimal.ZERO : customer.getCreditLimit();
+        if (before.compareTo(after) != 0) {
+            changes.add("Credit limit " + before.setScale(2, RoundingMode.HALF_UP).toPlainString()
+                    + " -> " + after.setScale(2, RoundingMode.HALF_UP).toPlainString());
+        }
+
+        if (!Objects.equals(oldPaymentTermsDays, customer.getPaymentTermsDays())) {
+            changes.add("Payment terms " + oldPaymentTermsDays + " -> " + customer.getPaymentTermsDays() + " days");
+        }
+
+        if (!changes.isEmpty()) {
+            auditLogService.record(
+                    "CUSTOMER_TERMS_CHANGED", "Customer", customer.getId(),
+                    "\"" + customer.getCustomerName() + "\": " + String.join("; ", changes) + " (" + source + ")"
+            );
+        }
     }
 
     public void deleteCustomer(Long id) {

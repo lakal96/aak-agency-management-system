@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,57 +53,121 @@ public class ExcelService {
         }
     }
 
+    /** One data row of an uploaded sheet with its real spreadsheet row number (header = row 1). */
+    public record ImportRow(int rowNumber, Map<String, String> values) {
+    }
+
+    /** The header names (trimmed) and every non-blank data row of the first sheet. */
+    public record ImportSheet(List<String> headers, List<ImportRow> rows) {
+    }
+
     /**
      * Reads every data row (skipping the header row) into an ordered header-name -> cell-text
      * map. Numeric/date cells are converted to plain text so callers can parse them as needed.
+     * Use {@link #readSheet(InputStream)} when the real spreadsheet row numbers matter.
      */
     public List<Map<String, String>> readRows(InputStream in) {
-        List<Map<String, String>> rows = new ArrayList<>();
+        return readSheet(in).rows().stream().map(ImportRow::values).toList();
+    }
+
+    /**
+     * Reads the first sheet. Blank rows are skipped but every returned row keeps its real
+     * spreadsheet row number, so error messages point at the row the clerk sees in Excel.
+     *
+     * Cell values: numeric cells are read as numbers (the exact decimal value, never the display
+     * format - 250.75 in a "0" formatted cell stays 250.75); formula cells are evaluated and give
+     * their computed value; date cells become yyyy-MM-dd; everything else is its text.
+     */
+    public ImportSheet readSheet(InputStream in) {
+        List<ImportRow> rows = new ArrayList<>();
+        List<String> headers = new ArrayList<>();
 
         try (Workbook workbook = WorkbookFactory.create(in)) {
             Sheet sheet = workbook.getSheetAt(0);
-            if (sheet.getLastRowNum() < 1) {
-                return rows;
-            }
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
 
             Row headerRow = sheet.getRow(0);
-            List<String> headers = new ArrayList<>();
-            for (Cell cell : headerRow) {
-                headers.add(cellText(cell).trim());
+            if (headerRow == null || sheet.getLastRowNum() < 1) {
+                return new ImportSheet(headers, rows);
             }
 
-            DataFormatter formatter = new DataFormatter();
+            for (int c = 0; c < headerRow.getLastCellNum(); c++) {
+                Cell cell = headerRow.getCell(c);
+                headers.add(cell == null ? "" : cellValue(cell, evaluator));
+            }
 
             for (int r = 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
-                if (row == null || isRowBlank(row, formatter)) {
+                if (row == null) {
                     continue;
                 }
 
                 Map<String, String> values = new LinkedHashMap<>();
+                boolean blank = true;
                 for (int c = 0; c < headers.size(); c++) {
                     Cell cell = row.getCell(c);
-                    values.put(headers.get(c), cell == null ? "" : formatter.formatCellValue(cell).trim());
+                    String text = cell == null ? "" : cellValue(cell, evaluator);
+                    if (!text.isEmpty()) {
+                        blank = false;
+                    }
+                    values.put(headers.get(c), text);
                 }
-                rows.add(values);
+
+                if (!blank) {
+                    rows.add(new ImportRow(r + 1, values));
+                }
             }
-        } catch (IOException e) {
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (IOException | RuntimeException e) {
             throw new IllegalArgumentException("Could not read the uploaded file - make sure it's a valid .xlsx export.", e);
         }
 
-        return rows;
+        return new ImportSheet(headers, rows);
     }
 
-    private boolean isRowBlank(Row row, DataFormatter formatter) {
-        for (Cell cell : row) {
-            if (!formatter.formatCellValue(cell).isBlank()) {
-                return false;
+    /** The text value of one cell (see {@link #readSheet}); never null, already trimmed. */
+    private String cellValue(Cell cell, FormulaEvaluator evaluator) {
+        CellType type = cell.getCellType();
+
+        if (type == CellType.FORMULA) {
+            try {
+                type = evaluator.evaluateFormulaCell(cell);
+            } catch (RuntimeException e) {
+                // A function POI cannot evaluate - fall back to the result Excel last saved.
+                type = cell.getCachedFormulaResultType();
             }
+            return formulaResult(cell, type);
         }
-        return true;
+
+        return switch (type) {
+            case STRING -> cell.getStringCellValue().trim();
+            case NUMERIC -> numericText(cell, cell.getNumericCellValue());
+            case BOOLEAN -> cell.getBooleanCellValue() ? "TRUE" : "FALSE";
+            case ERROR -> FormulaError.forInt(cell.getErrorCellValue()).getString();
+            default -> "";
+        };
     }
 
-    private String cellText(Cell cell) {
-        return cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : cell.toString();
+    private String formulaResult(Cell cell, CellType resultType) {
+        return switch (resultType) {
+            case STRING -> cell.getStringCellValue().trim();
+            case NUMERIC -> numericText(cell, cell.getNumericCellValue());
+            case BOOLEAN -> cell.getBooleanCellValue() ? "TRUE" : "FALSE";
+            case ERROR -> FormulaError.forInt(cell.getErrorCellValue()).getString();
+            default -> "";
+        };
+    }
+
+    private String numericText(Cell cell, double value) {
+        if (DateUtil.isCellDateFormatted(cell)) {
+            return DateUtil.getLocalDateTime(value).toLocalDate().toString();
+        }
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return "";
+        }
+        // The exact decimal text of the stored number (250.75 -> "250.75", 10.0 -> "10"),
+        // independent of how the cell is formatted on screen.
+        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
     }
 }
