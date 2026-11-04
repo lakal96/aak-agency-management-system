@@ -33,6 +33,22 @@ public class GlobalExceptionHandler {
         return "redirect:" + refererOrHome(request);
     }
 
+    @ExceptionHandler(org.springframework.dao.PessimisticLockingFailureException.class)
+    public String handleLockConflict(
+            org.springframework.dao.PessimisticLockingFailureException exception,
+            HttpServletRequest request,
+            RedirectAttributes redirectAttributes) {
+
+        LOGGER.warn("Lock conflict on {}: {}", request.getRequestURI(), exception.getMessage());
+
+        redirectAttributes.addFlashAttribute(
+                "errorMessage",
+                "Another person is changing this at the same moment, please try again."
+        );
+
+        return "redirect:" + refererOrHome(request);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public String handleIllegalArgument(
             IllegalArgumentException exception,
