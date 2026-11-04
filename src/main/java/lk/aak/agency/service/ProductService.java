@@ -11,6 +11,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -113,6 +116,37 @@ public class ProductService {
         }
 
         return productRepository.save(product);
+    }
+
+    /** Audit-logs a change of MRP or selling price (old -> new); does nothing when neither changed. */
+    public void recordPriceChange(Product product, BigDecimal oldMrp, BigDecimal oldSellingPrice, String source) {
+
+        List<String> changes = new ArrayList<>();
+
+        if (differs(oldMrp, product.getMrp())) {
+            changes.add("MRP " + money(oldMrp) + " -> " + money(product.getMrp()));
+        }
+        if (differs(oldSellingPrice, product.getStandardSellingPrice())) {
+            changes.add("Selling price " + money(oldSellingPrice) + " -> " + money(product.getStandardSellingPrice()));
+        }
+
+        if (!changes.isEmpty()) {
+            auditLogService.record(
+                    "PRODUCT_PRICE_CHANGED", "Product", product.getId(),
+                    "\"" + product.getProductName() + "\" (" + product.getCblProductCode() + "): "
+                            + String.join("; ", changes) + " (" + source + ")"
+            );
+        }
+    }
+
+    private static boolean differs(BigDecimal oldValue, BigDecimal newValue) {
+        BigDecimal before = oldValue == null ? BigDecimal.ZERO : oldValue;
+        BigDecimal after = newValue == null ? BigDecimal.ZERO : newValue;
+        return before.compareTo(after) != 0;
+    }
+
+    private static String money(BigDecimal value) {
+        return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     public void deleteProduct(Long id) {

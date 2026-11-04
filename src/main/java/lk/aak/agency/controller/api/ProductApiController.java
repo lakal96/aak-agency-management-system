@@ -7,6 +7,7 @@ import lk.aak.agency.dto.api.ProductRequest;
 import lk.aak.agency.dto.api.ProductResponse;
 import lk.aak.agency.model.Product;
 import lk.aak.agency.service.ExcelService;
+import lk.aak.agency.service.ProductImportService;
 import lk.aak.agency.service.ProductService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
@@ -19,9 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 
 @RestController
@@ -37,10 +36,13 @@ public class ProductApiController {
 
     private final ProductService productService;
     private final ExcelService excelService;
+    private final ProductImportService productImportService;
 
-    public ProductApiController(ProductService productService, ExcelService excelService) {
+    public ProductApiController(
+            ProductService productService, ExcelService excelService, ProductImportService productImportService) {
         this.productService = productService;
         this.excelService = excelService;
+        this.productImportService = productImportService;
     }
 
     @GetMapping
@@ -73,8 +75,12 @@ public class ProductApiController {
     public ProductResponse update(@PathVariable Long id, @Valid @RequestBody ProductRequest request) {
         Product product = productService.getProductById(id)
                 .orElseThrow(() -> new NoSuchElementException("Product not found."));
+        BigDecimal oldMrp = product.getMrp();
+        BigDecimal oldSellingPrice = product.getStandardSellingPrice();
         applyRequest(product, request);
-        return new ProductResponse(productService.saveProduct(product));
+        Product saved = productService.saveProduct(product);
+        productService.recordPriceChange(saved, oldMrp, oldSellingPrice, "edit");
+        return new ProductResponse(saved);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -118,69 +124,6 @@ public class ProductApiController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/import")
     public ImportSummaryResponse importProducts(@RequestParam("file") MultipartFile file) throws IOException {
-        List<Map<String, String>> rows = excelService.readRows(file.getInputStream());
-        List<ImportSummaryResponse.RowError> errors = new ArrayList<>();
-        int successCount = 0;
-
-        for (int i = 0; i < rows.size(); i++) {
-            int rowNumber = i + 2;
-            Map<String, String> row = rows.get(i);
-
-            try {
-                ProductRequest request = new ProductRequest();
-                request.setCblProductCode(row.getOrDefault("CBL Product Code*", ""));
-                request.setProductName(row.getOrDefault("Product Name*", ""));
-                request.setBrand(blankToNull(row.get("Brand")));
-                request.setCategory(blankToNull(row.get("Category")));
-                request.setNetWeight(blankToNull(row.get("Net Weight")));
-                request.setUnit(row.getOrDefault("Unit*", ""));
-                request.setMrp(parseDecimal(row.get("MRP")));
-                request.setStandardSellingPrice(parseDecimal(row.get("Standard Selling Price")));
-                request.setReorderLevel(parseDecimal(row.get("Reorder Level")));
-                request.setStatus(blankOr(row.get("Status"), "ACTIVE"));
-                request.setNotes(blankToNull(row.get("Notes")));
-
-                if (request.getCblProductCode().isBlank()) {
-                    throw new IllegalArgumentException("CBL Product Code is required.");
-                }
-                if (request.getProductName().isBlank()) {
-                    throw new IllegalArgumentException("Product Name is required.");
-                }
-                if (request.getUnit().isBlank()) {
-                    throw new IllegalArgumentException("Unit is required.");
-                }
-
-                // Upsert by CBL product code - re-importing the same sheet updates existing
-                // products instead of failing on the code's unique constraint.
-                Product product = productService.getProductByCblCode(request.getCblProductCode().trim().toUpperCase())
-                        .orElseGet(Product::new);
-                applyRequest(product, request);
-                productService.saveProduct(product);
-                successCount++;
-            } catch (Exception e) {
-                errors.add(new ImportSummaryResponse.RowError(rowNumber, e.getMessage()));
-            }
-        }
-
-        return new ImportSummaryResponse(rows.size(), successCount, errors);
-    }
-
-    private String blankToNull(String value) {
-        return (value == null || value.isBlank()) ? null : value.trim();
-    }
-
-    private String blankOr(String value, String fallback) {
-        return (value == null || value.isBlank()) ? fallback : value.trim();
-    }
-
-    private BigDecimal parseDecimal(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return new BigDecimal(value.trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("\"" + value + "\" is not a valid number.");
-        }
+        return productImportService.importProducts(file.getInputStream());
     }
 }

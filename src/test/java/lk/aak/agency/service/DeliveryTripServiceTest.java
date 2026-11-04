@@ -48,12 +48,14 @@ class DeliveryTripServiceTest {
     private VehicleRepository vehicleRepository;
     @Mock
     private EmployeeRepository employeeRepository;
+    @Mock
+    private InventoryService inventoryService;
 
     @Test
     void getLoadingSummary_combinesQuantitiesOfTheSameProductAcrossBills() {
         DeliveryTripService service = new DeliveryTripService(
                 deliveryTripRepository, deliveryTripLoadItemRepository, salesInvoiceRepository,
-                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository
+                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository, inventoryService
         );
 
         SalesInvoice invoiceOne = new SalesInvoice();
@@ -92,7 +94,7 @@ class DeliveryTripServiceTest {
     void confirmLoading_createsLoadItemsFromPlannedSummaryAndMarksTripLoaded() {
         DeliveryTripService service = new DeliveryTripService(
                 deliveryTripRepository, deliveryTripLoadItemRepository, salesInvoiceRepository,
-                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository
+                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository, inventoryService
         );
 
         DeliveryTrip trip = new DeliveryTrip();
@@ -100,7 +102,7 @@ class DeliveryTripServiceTest {
         trip.setStatus("PLANNED");
         trip.setVehicleNumber("NA-1234");
 
-        when(deliveryTripRepository.findById(10L)).thenReturn(Optional.of(trip));
+        when(deliveryTripRepository.lockById(10L)).thenReturn(Optional.of(trip));
 
         SalesInvoice invoice = new SalesInvoice();
         invoice.setId(1L);
@@ -134,14 +136,14 @@ class DeliveryTripServiceTest {
     void confirmLoading_rejectsTripThatIsNotPlanned() {
         DeliveryTripService service = new DeliveryTripService(
                 deliveryTripRepository, deliveryTripLoadItemRepository, salesInvoiceRepository,
-                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository
+                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository, inventoryService
         );
 
         DeliveryTrip trip = new DeliveryTrip();
         trip.setId(10L);
         trip.setStatus("LOADED");
 
-        when(deliveryTripRepository.findById(10L)).thenReturn(Optional.of(trip));
+        when(deliveryTripRepository.lockById(10L)).thenReturn(Optional.of(trip));
 
         assertThatThrownBy(() -> service.confirmLoading(10L, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -153,7 +155,7 @@ class DeliveryTripServiceTest {
     void getVehicleStockSummary_sumsLoadedQuantitiesOnlyForTripsStillLoaded() {
         DeliveryTripService service = new DeliveryTripService(
                 deliveryTripRepository, deliveryTripLoadItemRepository, salesInvoiceRepository,
-                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository
+                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository, inventoryService
         );
 
         DeliveryTrip loadedTrip = new DeliveryTrip();
@@ -184,5 +186,33 @@ class DeliveryTripServiceTest {
         assertThat(stock).hasSize(1);
         assertThat(stock.get(0).getVehicleNumber()).isEqualTo("NA-1234");
         assertThat(stock.get(0).getLoadedQuantity()).isEqualByComparingTo("6");
+    }
+
+    @Test
+    void assignInvoiceToTrip_locksTripThenInvoiceBeforeCheckingAndNeverUsesAPlainRead() {
+        DeliveryTripService service = new DeliveryTripService(
+                deliveryTripRepository, deliveryTripLoadItemRepository, salesInvoiceRepository,
+                salesInvoiceItemRepository, routeRepository, vehicleRepository, employeeRepository, inventoryService
+        );
+
+        DeliveryTrip trip = new DeliveryTrip();
+        trip.setId(10L);
+        trip.setStatus("PLANNED");
+        SalesInvoice invoice = new SalesInvoice();
+        invoice.setId(1L);
+        invoice.setStatus("COMPLETED");
+
+        when(deliveryTripRepository.lockById(10L)).thenReturn(Optional.of(trip));
+        when(salesInvoiceRepository.lockById(1L)).thenReturn(Optional.of(invoice));
+
+        service.assignInvoiceToTrip(10L, 1L);
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(deliveryTripRepository, salesInvoiceRepository);
+        order.verify(deliveryTripRepository).lockById(10L);
+        order.verify(salesInvoiceRepository).lockById(1L);
+        order.verify(salesInvoiceRepository).save(invoice);
+        verify(salesInvoiceRepository, never()).findById(any());
+        verify(deliveryTripRepository, never()).findById(any());
+        assertThat(invoice.getDeliveryTripId()).isEqualTo(10L);
     }
 }

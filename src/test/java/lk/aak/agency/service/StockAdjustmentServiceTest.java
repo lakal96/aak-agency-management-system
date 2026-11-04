@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +59,7 @@ class StockAdjustmentServiceTest {
         adjustment.setAdjustmentType("opening_stock");
         adjustment.setDirection("OUT");
         adjustment.setQuantity(new BigDecimal("100"));
+        adjustment.setNotes("Opening count at go-live");
 
         service.saveAdjustment(adjustment, 1L, "admin");
 
@@ -84,5 +86,64 @@ class StockAdjustmentServiceTest {
 
         assertThatThrownBy(() -> service.saveAdjustment(adjustment, 1L, "admin"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private StockAdjustmentService service() {
+        return new StockAdjustmentService(
+                stockAdjustmentRepository, stockMovementRepository, productRepository, inventoryService, rowLockService
+        );
+    }
+
+    private StockAdjustment adjustment(String type, String quantity, String notes) {
+        StockAdjustment adjustment = new StockAdjustment();
+        adjustment.setAdjustmentType(type);
+        adjustment.setQuantity(new BigDecimal(quantity));
+        adjustment.setNotes(notes);
+        return adjustment;
+    }
+
+    private Product productWithId1() {
+        Product product = new Product();
+        product.setId(1L);
+        product.setUnit("PKT");
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        return product;
+    }
+
+    @Test
+    void saveAdjustment_requiresANote() {
+        productWithId1();
+
+        for (String blank : new String[]{null, "", "   "}) {
+            assertThatThrownBy(() -> service().saveAdjustment(adjustment("DAMAGED", "2", blank), 1L, "admin"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("short note");
+        }
+        verify(stockMovementRepository, never()).save(any());
+    }
+
+    @Test
+    void saveAdjustment_quantityMustBeBelowOneMillion() {
+        productWithId1();
+
+        assertThatThrownBy(() -> service().saveAdjustment(adjustment("STOCK_CORRECTION_IN", "1000000", "typo"), 1L, "admin"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("too large");
+        verify(stockMovementRepository, never()).save(any());
+    }
+
+    @Test
+    void saveAdjustment_openingStockIsRefusedWhenTheProductAlreadyHasMovements_afterLockingIt() {
+        productWithId1();
+        when(stockMovementRepository.existsByProductId(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service().saveAdjustment(adjustment("OPENING_STOCK", "10", "count"), 1L, "admin"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no stock movements yet");
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(rowLockService, stockMovementRepository);
+        order.verify(rowLockService).lockProducts(java.util.List.of(1L));
+        order.verify(stockMovementRepository).existsByProductId(1L);
+        verify(stockMovementRepository, never()).save(any());
     }
 }
