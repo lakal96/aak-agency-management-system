@@ -95,6 +95,42 @@ class PdfServiceTest {
     }
 
     @Test
+    void aLongBillRepeatsTheColumnNamesAndKeepsItsTotalsTogetherOnOnePage() throws Exception {
+        for (int lines : new int[]{18, 19, 20, 21, 22, 23, 24, 25, 26, 38, 39, 40, 41, 60}) {
+            SalesInvoiceItem[] first = new SalesInvoiceItem[1];
+            SalesInvoice invoice = salesInvoice(first);
+            List<SalesInvoiceItem> items = new java.util.ArrayList<>();
+            for (int i = 0; i < lines; i++) {
+                items.add(first[0]);
+            }
+
+            byte[] pdf = pdfService.generateSalesInvoicePdf(invoice, items, new BigDecimal("500"), new BigDecimal("1233067.5"));
+
+            PdfReader reader = new PdfReader(pdf);
+            try {
+                PdfTextExtractor extractor = new PdfTextExtractor(reader);
+                int pages = reader.getNumberOfPages();
+                for (int page = 2; page <= pages; page++) {
+                    String text = extractor.getTextFromPage(page);
+                    if (text.contains("Sample Biscuit Pack")) {
+                        assertThat(text).as("%d lines: page %d carries rows, so it repeats the column names", lines, page).contains("Unit Price");
+                    }
+                }
+                int withGross = -1;
+                int withBalance = -1;
+                for (int page = 1; page <= pages; page++) {
+                    String text = extractor.getTextFromPage(page);
+                    if (text.contains("Gross Amount")) withGross = page;
+                    if (text.contains("Balance")) withBalance = page;
+                }
+                assertThat(withBalance).as("%d lines: the totals box is on one page", lines).isEqualTo(withGross);
+            } finally {
+                reader.close();
+            }
+        }
+    }
+
+    @Test
     void theSinhalaFontIsEmbeddedInThePdf() throws Exception {
         SalesInvoiceItem[] item = new SalesInvoiceItem[1];
         byte[] pdf = pdfService.generateSalesInvoicePdf(salesInvoice(item), List.of(item[0]), BigDecimal.ZERO, BigDecimal.ZERO);
