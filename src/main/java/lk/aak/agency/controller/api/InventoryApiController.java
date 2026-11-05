@@ -23,6 +23,19 @@ public class InventoryApiController {
 
     @GetMapping
     public List<InventoryItemResponse> currentStock() {
+        return stockList();
+    }
+
+    /**
+     * The same stock figures, open to sales reps as well (see ApiSecurityConfig): they only get what the bill
+     * screen shows beside a product - code, name, unit, how many are in stock and the reorder level.
+     */
+    @GetMapping("/availability")
+    public List<InventoryItemResponse> availability() {
+        return stockList();
+    }
+
+    private List<InventoryItemResponse> stockList() {
 
         Map<Long, BigDecimal> stockByProduct = inventoryService.getStockByProduct();
 

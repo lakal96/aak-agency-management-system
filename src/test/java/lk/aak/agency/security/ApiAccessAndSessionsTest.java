@@ -153,6 +153,24 @@ class ApiAccessAndSessionsTest {
     }
 
     @Test
+    void repsCanSeeTheStockCountForBillingButNotTheRestOfInventory() throws Exception {
+        SystemUser rep = newUser("SALES_REP");
+        SystemUser office = newUser("OFFICE");
+        SystemUser driver = newUser("DRIVER");
+
+        mockMvc.perform(as(get("/api/v1/inventory/availability"), rep)).andExpect(status().isOk());
+        mockMvc.perform(as(get("/api/v1/inventory/availability"), office)).andExpect(status().isOk());
+        mockMvc.perform(as(get("/api/v1/inventory/availability"), newUser("ADMIN"))).andExpect(status().isOk());
+        mockMvc.perform(as(get("/api/v1/inventory/availability"), driver)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/inventory/availability")).andExpect(status().isUnauthorized());
+
+        // everything else about stock stays closed to a rep
+        mockMvc.perform(as(get("/api/v1/inventory"), rep)).andExpect(status().isForbidden());
+        mockMvc.perform(as(get("/api/v1/stock-adjustments"), rep)).andExpect(status().isForbidden());
+        mockMvc.perform(as(post("/api/v1/inventory/availability"), rep)).andExpect(status().isForbidden());
+    }
+
+    @Test
     void ownerOfficeAndRepsStillReachTheDashboard() throws Exception {
         for (String role : List.of("ADMIN", "OFFICE", "SALES_REP")) {
             mockMvc.perform(as(get("/api/v1/dashboard/summary"), newUser(role))).andExpect(status().isOk());
