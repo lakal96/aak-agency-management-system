@@ -94,6 +94,13 @@ public class ApiSecurityConfig {
                          */
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/**")
                         .hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
+                        /*
+                         * The stock count per product, read-only: a rep billing a shop from the phone
+                         * needs to see what is in stock. The rest of Inventory (and every other stock
+                         * screen) stays office/owner only. Listed before the /inventory/** rule below.
+                         */
+                        .requestMatchers(HttpMethod.GET, "/api/v1/inventory/availability")
+                        .hasAnyRole("ADMIN", "OFFICE", "SALES_REP")
                         .requestMatchers(
                                 "/api/v1/products/**",
                                 "/api/v1/purchase-invoices/**",
