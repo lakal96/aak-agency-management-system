@@ -320,6 +320,10 @@ public class PdfService {
             cell.setPadding(6f);
             table.addCell(cell);
         }
+        // A long bill runs over to a second page: repeat the column names there, and never split a product's row.
+        table.setHeaderRows(1);
+        table.setSplitLate(true);
+        table.setSplitRows(false);
 
         for (String[] row : rows) {
             for (String value : row) {
@@ -346,6 +350,8 @@ public class PdfService {
         table.setWidthPercentage(45);
         table.setHorizontalAlignment(Element.ALIGN_RIGHT);
         table.setWidths(new float[]{1.3f, 1f});
+        // Gross, discount, returns, net, paid and balance belong together: all on one page, never split.
+        table.setKeepTogether(true);
 
         for (String[] row : rows) {
             boolean isGrandTotal = row[0].toLowerCase().contains("net amount") || row[0].toLowerCase().contains("total amount");
@@ -370,6 +376,7 @@ public class PdfService {
         PdfPTable signatures = new PdfPTable(3);
         signatures.setWidthPercentage(100);
         signatures.setSpacingBefore(40f);
+        signatures.setKeepTogether(true);
 
         for (String label : new String[]{"Prepared By", "Checked By", "Customer Signature"}) {
             PdfPCell cell = new PdfPCell(fonts.phrase(label, LABEL_FONT));
