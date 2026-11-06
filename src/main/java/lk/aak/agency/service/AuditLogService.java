@@ -20,10 +20,15 @@ public class AuditLogService {
 
     /** Records who did what to which record - failures here must never block the action itself. */
     public void record(String action, String entityType, Long entityId, String details) {
+        recordAs(currentUsername(), action, entityType, entityId, details);
+    }
+
+    /** Same, for work done by the system itself (for example the e-mail invoice intake) rather than a signed-in person. */
+    public void recordAs(String username, String action, String entityType, Long entityId, String details) {
 
         try {
             AuditLog auditLog = new AuditLog();
-            auditLog.setUsername(currentUsername());
+            auditLog.setUsername(username);
             auditLog.setAction(action);
             auditLog.setEntityType(entityType);
             auditLog.setEntityId(entityId);

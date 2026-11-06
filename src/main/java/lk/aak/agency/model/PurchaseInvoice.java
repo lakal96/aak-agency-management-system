@@ -89,6 +89,10 @@ public class PurchaseInvoice {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    /** MANUAL (typed in) or EMAIL (made from the PDF CBL e-mailed). */
+    @Column(name = "source", nullable = false, length = 20)
+    private String source = "MANUAL";
+
     @Column(
             name = "invoice_file_original_name",
             length = 255
@@ -193,6 +197,9 @@ public class PurchaseInvoice {
             createdAt = BusinessTime.now();
         }
     }
+
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
 
     public Long getId() {
         return id;

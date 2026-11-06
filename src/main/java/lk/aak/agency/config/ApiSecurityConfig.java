@@ -76,6 +76,12 @@ public class ApiSecurityConfig {
                          * name - no other customer data is exposed on this public path.
                          */
                         .requestMatchers("/api/v1/customers/scan/*/preview").permitAll()
+                        /*
+                         * The Gmail script has no login: it proves itself with a long secret token that the
+                         * controller checks (and the address does not exist at all while no token is set).
+                         * It can only create a DRAFT purchase invoice from a CBL PDF.
+                         */
+                        .requestMatchers(HttpMethod.POST, "/api/v1/purchase-invoices/email-intake").permitAll()
                         .requestMatchers("/api/v1/users/**", "/api/v1/audit-log/**").hasRole("ADMIN")
                         /*
                          * Approving or rejecting a return changes stock and what is owed, so it is
