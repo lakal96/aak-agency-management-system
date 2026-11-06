@@ -45,4 +45,7 @@ public interface ProductRepository
                 OR LOWER(p.category) LIKE LOWER(CONCAT('%', :keyword, '%'))
             """)
     Page<Product> search(@Param("keyword") String keyword, Pageable pageable);
+
+    /** Products still on a temporary code (TEMP-001 ...), to be given their real CBL code when first invoiced. */
+    java.util.List<Product> findByCblProductCodeStartingWith(String prefix);
 }

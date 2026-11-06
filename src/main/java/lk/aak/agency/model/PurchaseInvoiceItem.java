@@ -67,6 +67,21 @@ public class PurchaseInvoiceItem {
     @Column(name = "expiry_date")
     private LocalDate expiryDate;
 
+    // What CBL printed on its invoice (set for lines that came from an e-mailed invoice): quantity in the
+    // invoiced unit (dozens / cartons), that unit, its price and the exact line amount. `quantity` above is the
+    // number of pieces that go into stock.
+    @Column(name = "invoiced_quantity", precision = 15, scale = 2)
+    private BigDecimal invoicedQuantity;
+
+    @Column(name = "invoiced_unit", length = 20)
+    private String invoicedUnit;
+
+    @Column(name = "invoiced_unit_price", precision = 15, scale = 4)
+    private BigDecimal invoicedUnitPrice;
+
+    @Column(name = "invoiced_amount", precision = 15, scale = 2)
+    private BigDecimal invoicedAmount;
+
     public PurchaseInvoiceItem() {
     }
 
@@ -95,12 +110,25 @@ public class PurchaseInvoiceItem {
         }
 
         // Two decimals, so draft and completed totals always agree with what is stored.
-        amount = quantity.multiply(unitPrice).setScale(2, java.math.RoundingMode.HALF_UP);
+        // A line taken from CBL's own invoice keeps the amount CBL printed (its unit price is rounded, so
+        // quantity x price can be a few cents or rupees away from it, and what we owe CBL must match exactly).
+        amount = invoicedAmount != null
+                ? invoicedAmount.setScale(2, java.math.RoundingMode.HALF_UP)
+                : quantity.multiply(unitPrice).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     public void calculateAmount() {
         calculateValues();
     }
+
+    public BigDecimal getInvoicedQuantity() { return invoicedQuantity; }
+    public void setInvoicedQuantity(BigDecimal invoicedQuantity) { this.invoicedQuantity = invoicedQuantity; }
+    public String getInvoicedUnit() { return invoicedUnit; }
+    public void setInvoicedUnit(String invoicedUnit) { this.invoicedUnit = invoicedUnit; }
+    public BigDecimal getInvoicedUnitPrice() { return invoicedUnitPrice; }
+    public void setInvoicedUnitPrice(BigDecimal invoicedUnitPrice) { this.invoicedUnitPrice = invoicedUnitPrice; }
+    public BigDecimal getInvoicedAmount() { return invoicedAmount; }
+    public void setInvoicedAmount(BigDecimal invoicedAmount) { this.invoicedAmount = invoicedAmount; }
 
     public Long getId() {
         return id;

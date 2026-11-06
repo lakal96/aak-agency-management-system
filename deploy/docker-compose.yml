@@ -49,6 +49,8 @@ services:
       APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
       APP_ADMIN_FULL_NAME: ${APP_ADMIN_FULL_NAME:-AAK Agency Owner}
+      # Secret for the Gmail script that posts CBL's e-mailed invoice PDFs. Empty = the e-mail intake address is off.
+      AAK_INTAKE_TOKEN: ${AAK_INTAKE_TOKEN:-}
     volumes:
       - uploads_data:/app/uploads
     networks:

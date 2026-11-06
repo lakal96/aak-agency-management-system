@@ -104,6 +104,13 @@
 			<version>2.0.3</version>
 		</dependency>
 
+		<!-- Reads the text of the PDF invoices CBL e-mails (column-aware; OpenPDF only writes PDFs well). -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.5</version>
+		</dependency>
+
 		<!-- MySQL database driver -->
 		<dependency>
 			<groupId>com.mysql</groupId>

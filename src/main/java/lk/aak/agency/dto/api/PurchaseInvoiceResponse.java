@@ -23,6 +23,7 @@ public class PurchaseInvoiceResponse {
     private final String paymentMethod;
     private final String status;
     private final String notes;
+    private final String source;
     private final boolean hasInvoiceFile;
     private final String invoiceFileOriginalName;
     private final boolean invoiceVerified;
@@ -44,6 +45,7 @@ public class PurchaseInvoiceResponse {
         this.paymentMethod = invoice.getPaymentMethod();
         this.status = invoice.getStatus();
         this.notes = invoice.getNotes();
+        this.source = invoice.getSource();
         this.hasInvoiceFile = invoice.hasInvoiceFile();
         this.invoiceFileOriginalName = invoice.getInvoiceFileOriginalName();
         this.invoiceVerified = invoice.isInvoiceVerified();
@@ -119,6 +121,10 @@ public class PurchaseInvoiceResponse {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getSource() {
+        return source;
     }
 
     public String getNotes() {

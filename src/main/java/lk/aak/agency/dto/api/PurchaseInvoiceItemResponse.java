@@ -15,6 +15,9 @@ public class PurchaseInvoiceItemResponse {
     private final BigDecimal unitPrice;
     private final BigDecimal amount;
     private final LocalDate expiryDate;
+    private final BigDecimal invoicedQuantity;
+    private final String invoicedUnit;
+    private final BigDecimal invoicedUnitPrice;
 
     public PurchaseInvoiceItemResponse(PurchaseInvoiceItem item) {
         this.id = item.getId();
@@ -25,6 +28,9 @@ public class PurchaseInvoiceItemResponse {
         this.unitPrice = item.getUnitPrice();
         this.amount = item.getAmount();
         this.expiryDate = item.getExpiryDate();
+        this.invoicedQuantity = item.getInvoicedQuantity();
+        this.invoicedUnit = item.getInvoicedUnit();
+        this.invoicedUnitPrice = item.getInvoicedUnitPrice();
     }
 
     public Long getId() {
@@ -53,6 +59,18 @@ public class PurchaseInvoiceItemResponse {
 
     public BigDecimal getAmount() {
         return amount;
+    }
+
+    public BigDecimal getInvoicedQuantity() {
+        return invoicedQuantity;
+    }
+
+    public String getInvoicedUnit() {
+        return invoicedUnit;
+    }
+
+    public BigDecimal getInvoicedUnitPrice() {
+        return invoicedUnitPrice;
     }
 
     public LocalDate getExpiryDate() {
