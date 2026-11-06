@@ -25,6 +25,7 @@ public class PurchaseInvoiceService {
     private final PurchaseInvoiceRepository purchaseInvoiceRepository;
     private final PurchaseInvoiceItemRepository purchaseInvoiceItemRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final lk.aak.agency.batch.StockBatchService stockBatchService;
     private final AuditLogService auditLogService;
     private final RowLockService rowLockService;
 
@@ -33,9 +34,11 @@ public class PurchaseInvoiceService {
             PurchaseInvoiceItemRepository purchaseInvoiceItemRepository,
             StockMovementRepository stockMovementRepository,
             AuditLogService auditLogService,
-            RowLockService rowLockService) {
+            RowLockService rowLockService,
+            lk.aak.agency.batch.StockBatchService stockBatchService) {
 
         this.rowLockService = rowLockService;
+        this.stockBatchService = stockBatchService;
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
         this.purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
         this.stockMovementRepository = stockMovementRepository;
@@ -385,6 +388,9 @@ public class PurchaseInvoiceService {
         invoice.setStatus("COMPLETED");
 
         purchaseInvoiceRepository.save(invoice);
+
+        // remember what each received line cost, and the price that cost implies (phase 1: record only)
+        stockBatchService.recordBatches(invoice, items);
     }
 
     /*
