@@ -234,7 +234,17 @@ public class PurchaseInvoiceApiController {
         invoice.setPaymentMethod(request.getPaymentMethod());
         invoice.setNotes(request.getNotes());
 
-        var items = request.getItems().stream().map(itemRequest -> {
+        // lines already on the draft: an untouched line keeps CBL's own figures (quantity in dozens, exact amount)
+        java.util.Map<Long, PurchaseInvoiceItem> existing = new java.util.HashMap<>();
+        if (invoice.getId() != null) {
+            purchaseInvoiceItemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId())
+                    .forEach(item -> existing.put(item.getId(), item));
+        }
+
+        java.util.List<PurchaseInvoiceItem> items = new java.util.ArrayList<>();
+        int lineNumber = 0;
+        for (var itemRequest : request.getItems()) {
+            lineNumber++;
             Product product = productRepository.findById(itemRequest.getProductId())
                     .orElseThrow(() -> new IllegalArgumentException("Selected product was not found."));
 
@@ -243,8 +253,38 @@ public class PurchaseInvoiceApiController {
             item.setQuantity(itemRequest.getQuantity());
             item.setUnitPrice(itemRequest.getUnitPrice());
             item.setExpiryDate(itemRequest.getExpiryDate());
-            return item;
-        }).toList();
+
+            java.math.BigDecimal computed = itemRequest.getQuantity().multiply(itemRequest.getUnitPrice())
+                    .setScale(2, java.math.RoundingMode.HALF_UP);
+            java.math.BigDecimal amount = itemRequest.getAmount();
+
+            PurchaseInvoiceItem old = itemRequest.getId() == null ? null : existing.get(itemRequest.getId());
+            boolean untouched = old != null && old.getProduct().getId().equals(product.getId())
+                    && old.getQuantity().compareTo(itemRequest.getQuantity()) == 0;
+            if (untouched) {
+                // same product and pieces: CBL's own quantity / unit / price still describe this line
+                item.setInvoicedQuantity(old.getInvoicedQuantity());
+                item.setInvoicedUnit(old.getInvoicedUnit());
+                item.setInvoicedUnitPrice(old.getInvoicedUnitPrice());
+                if (amount == null && old.getInvoicedAmount() != null && old.getUnitPrice().compareTo(itemRequest.getUnitPrice()) == 0) {
+                    amount = old.getInvoicedAmount();
+                }
+            }
+
+            if (amount != null) {
+                java.math.BigDecimal tolerance = itemRequest.getQuantity().multiply(new java.math.BigDecimal("0.006"))
+                        .add(new java.math.BigDecimal("0.02"));
+                if (amount.subtract(computed).abs().compareTo(tolerance) > 0) {
+                    throw new IllegalArgumentException("Line " + lineNumber + " (" + product.getProductName() + "): the amount "
+                            + amount.toPlainString() + " does not match quantity x unit price (" + computed.toPlainString()
+                            + "). Correct the unit price or the amount.");
+                }
+                if (amount.compareTo(computed) != 0) {
+                    item.setInvoicedAmount(amount);   // the printed amount counts, not quantity x rounded price
+                }
+            }
+            items.add(item);
+        }
 
         return purchaseInvoiceService.saveInvoiceWithItems(invoice, items);
     }

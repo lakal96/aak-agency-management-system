@@ -26,6 +26,33 @@ public class PurchaseInvoiceItemRequest {
 
     private LocalDate expiryDate;
 
+    /** The id of the line being edited (when this line already exists on the draft). */
+    private Long id;
+
+    /**
+     * The line amount exactly as CBL printed it (optional). CBL's printed unit price is rounded, so quantity x price can
+     * be a few cents off the printed amount; when this is given and differs, it is the amount that counts.
+     */
+    @DecimalMin(value = "0", message = "Amount cannot be negative.")
+    @DecimalMax(value = "999999999.99", message = "Amount is too large - please check the number.")
+    private BigDecimal amount;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public BigDecimal getAmount() {
+        return amount;
+    }
+
+    public void setAmount(BigDecimal amount) {
+        this.amount = Decimals.round2(amount);
+    }
+
     public Long getProductId() {
         return productId;
     }
