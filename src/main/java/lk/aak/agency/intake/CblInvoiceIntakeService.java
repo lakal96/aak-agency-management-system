@@ -194,6 +194,10 @@ public class CblInvoiceIntakeService {
                 .append("verification box and press Complete - only then does the stock go up and the amount owed to CBL increase.\n");
         text.append(parsed.lines().size()).append(" product lines. Quantities are in PIECES (an invoiced dozen is 12 pieces); each line keeps CBL's own ")
                 .append("quantity, unit and price, and the exact amount CBL printed.\n");
+        text.append("CBL's printed totals: rows Rs ").append(parsed.totalOrderValue().toPlainString())
+                .append(", discount Rs ").append(parsed.discount().toPlainString())
+                .append(", TOTAL Rs ").append(parsed.totalValueOfSupply().toPlainString())
+                .append(" - the total of this draft must still equal this unless you changed a line on purpose.\n");
         if (parsed.deliveryNotes() != null) text.append("CBL delivery notes: ").append(parsed.deliveryNotes()).append(".\n");
         for (String note : notes) text.append(note).append('\n');
         return text.toString().trim();

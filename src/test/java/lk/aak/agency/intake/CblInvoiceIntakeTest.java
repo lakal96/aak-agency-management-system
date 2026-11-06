@@ -31,6 +31,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -116,6 +117,122 @@ class CblInvoiceIntakeTest {
 
     private BigDecimal stockOf(Product product) {
         return inventoryService.getStockByProduct().getOrDefault(product.getId(), BigDecimal.ZERO);
+    }
+
+    // ------------------------------------------------------------ editing the draft while checking it
+
+    @Autowired private lk.aak.agency.repository.SystemUserRepository userRepository;
+    @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    @Autowired private lk.aak.agency.security.jwt.JwtService jwtService;
+
+    private String ownerToken() {
+        var user = userRepository.save(new lk.aak.agency.model.SystemUser("edit_" + java.util.UUID.randomUUID().toString().substring(0, 8),
+                passwordEncoder.encode("password1"), "Owner", "ADMIN", true));
+        return jwtService.generateAccessToken(user.getUsername(), user.getRole());
+    }
+
+    /** the PUT body the edit screen sends: the draft as it is now, with the given line changes applied by `lines` */
+    private String editBody(PurchaseInvoice invoice, String linesJson) {
+        return "{\"documentNumber\":\"" + invoice.getDocumentNumber() + "\",\"taxInvoiceNumber\":\"" + invoice.getTaxInvoiceNumber()
+                + "\",\"poNumber\":\"" + invoice.getPoNumber() + "\",\"invoiceDate\":\"2026-11-06\",\"deliveryDate\":\"2026-11-06\","
+                + "\"supplierName\":\"CBL Foods International (Pvt) Ltd\",\"territory\":\"Makola - RTM\",\"placeOfSupply\":\"Ranala\","
+                + "\"discountAmount\":1000.00,\"vatAmount\":0,\"paymentMethod\":\"BANK_TRANSFER\",\"notes\":\"edited\",\"items\":" + linesJson + "}";
+    }
+
+    private PurchaseInvoice draftFromEmail(String number) throws Exception {
+        product("CHS90001", "TEST CHOCOLA MILK 20GX24DZ - SACMI");
+        product("CHS90002", "TEST CHO. FINGERS 18GX32DZ");
+        product("CHS90004", "TEST RITZ. MOMENTS ASSORTMENT PACK 240GX12EA");
+        CblInvoiceIntakeService.Result r = intake.importInvoice(goodPdf(number), "invoice.pdf");
+        assertThat(r.problems()).isEmpty();
+        return invoiceRepository.findById(r.invoiceId()).orElseThrow();
+    }
+
+    @Test
+    void editingTheDraftWithoutChangingALineKeepsCblsExactAmountsAndFigures() throws Exception {
+        PurchaseInvoice invoice = draftFromEmail("26NOV_TEST_0000000010");
+        var items = itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId());
+
+        // the screen sends back every line exactly as it was shown
+        StringBuilder lines = new StringBuilder("[");
+        for (PurchaseInvoiceItem i : items) {
+            if (lines.length() > 1) lines.append(',');
+            lines.append("{\"id\":").append(i.getId()).append(",\"productId\":").append(i.getProduct().getId())
+                    .append(",\"quantity\":").append(i.getQuantity()).append(",\"unitPrice\":").append(i.getUnitPrice())
+                    .append(",\"amount\":").append(i.getAmount()).append('}');
+        }
+        lines.append(']');
+
+        mockMvc.perform(put("/api/v1/purchase-invoices/" + invoice.getId()).header("Authorization", "Bearer " + ownerToken())
+                        .contentType("application/json").content(editBody(invoice, lines.toString())))
+                .andExpect(status().isOk());
+
+        var after = itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId());
+        assertThat(after).extracting(PurchaseInvoiceItem::getAmount).usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("120916.80"), new BigDecimal("12897.79"), new BigDecimal("57099.60"), new BigDecimal("78595.92"));
+        assertThat(after.get(0).getInvoicedUnit()).isEqualTo("DZ");
+        assertThat(after.get(0).getInvoicedQuantity()).isEqualByComparingTo("240");
+        assertThat(invoiceRepository.findById(invoice.getId()).orElseThrow().getSource()).isEqualTo("EMAIL");
+    }
+
+    @Test
+    void aWrongLineCanBeCorrectedAndAMissingLineAddedWithItsPrintedAmount() throws Exception {
+        PurchaseInvoice invoice = draftFromEmail("26NOV_TEST_0000000011");
+        var items = itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId());
+        Product extra = product("CHS90099", "TEST EXTRA PRODUCT 10GX48DZ");
+
+        // line 1 corrected to 1,440 pieces at the same price per piece (amount follows quantity x price);
+        // line 2 untouched; lines 3 and 4 removed; a new line added with the amount printed on the PDF
+        String first = "{\"id\":" + items.get(0).getId() + ",\"productId\":" + items.get(0).getProduct().getId()
+                + ",\"quantity\":1440,\"unitPrice\":41.99,\"amount\":60465.60}";
+        String second = "{\"id\":" + items.get(1).getId() + ",\"productId\":" + items.get(1).getProduct().getId()
+                + ",\"quantity\":384,\"unitPrice\":" + items.get(1).getUnitPrice() + ",\"amount\":" + items.get(1).getAmount() + "}";
+        String added = "{\"productId\":" + extra.getId() + ",\"quantity\":576,\"unitPrice\":3.25,\"amount\":1871.52}";
+
+        mockMvc.perform(put("/api/v1/purchase-invoices/" + invoice.getId()).header("Authorization", "Bearer " + ownerToken())
+                        .contentType("application/json").content(editBody(invoice, "[" + first + "," + second + "," + added + "]")))
+                .andExpect(status().isOk());
+
+        var after = itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId());
+        assertThat(after).hasSize(3);
+        assertThat(after.get(0).getQuantity()).isEqualByComparingTo("1440");
+        assertThat(after.get(0).getAmount()).isEqualByComparingTo("60465.60");
+        assertThat(after.get(0).getInvoicedUnit()).as("a changed line no longer claims CBL's old figures").isNull();
+        assertThat(after.get(1).getAmount()).as("an untouched line stays exact").isEqualByComparingTo("12897.79");
+        assertThat(after.get(1).getInvoicedUnit()).isEqualTo("DZ");
+        assertThat(after.get(2).getAmount()).as("a line added by hand keeps the printed amount").isEqualByComparingTo("1871.52");
+        PurchaseInvoice saved = invoiceRepository.findById(invoice.getId()).orElseThrow();
+        assertThat(saved.getSubtotal()).isEqualByComparingTo("75234.91");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("74234.91");
+    }
+
+    @Test
+    void anAmountThatDoesNotMatchQuantityTimesPriceIsRefused() throws Exception {
+        PurchaseInvoice invoice = draftFromEmail("26NOV_TEST_0000000012");
+        var items = itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId());
+        String line = "{\"id\":" + items.get(0).getId() + ",\"productId\":" + items.get(0).getProduct().getId()
+                + ",\"quantity\":100,\"unitPrice\":41.99,\"amount\":9999.00}";
+
+        mockMvc.perform(put("/api/v1/purchase-invoices/" + invoice.getId()).header("Authorization", "Bearer " + ownerToken())
+                        .contentType("application/json").content(editBody(invoice, "[" + line + "]")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("does not match quantity x unit price")));
+        // nothing was changed
+        assertThat(itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId())).hasSize(4);
+    }
+
+    @Test
+    void aCompletedInvoiceCannotBeEdited() throws Exception {
+        PurchaseInvoice invoice = draftFromEmail("26NOV_TEST_0000000013");
+        purchaseInvoiceService.completeInvoice(invoice.getId(), true);
+        invoiceRepository.flush();   // in real life the completion has been committed before anyone edits
+        var items = itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId());
+        String line = "{\"id\":" + items.get(0).getId() + ",\"productId\":" + items.get(0).getProduct().getId()
+                + ",\"quantity\":2880,\"unitPrice\":41.99}";
+
+        mockMvc.perform(put("/api/v1/purchase-invoices/" + invoice.getId()).header("Authorization", "Bearer " + ownerToken())
+                        .contentType("application/json").content(editBody(invoice, "[" + line + "]")))
+                .andExpect(status().isBadRequest());
     }
 
     // ------------------------------------------------------------ tests
