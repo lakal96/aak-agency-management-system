@@ -60,7 +60,7 @@ class MoneyLockOrderTest {
     private PurchaseInvoiceService purchaseService() {
         return new PurchaseInvoiceService(
                 purchaseInvoiceRepository, purchaseInvoiceItemRepository, stockMovementRepository,
-                auditLogService, rowLockService);
+                auditLogService, rowLockService, org.mockito.Mockito.mock(lk.aak.agency.batch.StockBatchService.class));
     }
 
     private PaymentService paymentService() {
