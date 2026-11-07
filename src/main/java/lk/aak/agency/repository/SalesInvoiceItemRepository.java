@@ -35,4 +35,19 @@ public interface SalesInvoiceItemRepository
             """)
     List<Object[]> completedSalesByCategory(
             @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("employeeId") Long employeeId);
+
+    /**
+     * How much of each product other people's DRAFT bills already ask for (nothing is taken from stock until a bill is
+     * completed, so the bill screen uses this to warn that the stock shown is already spoken for). Drafts older than
+     * `since` are ignored so a forgotten draft does not hold stock for ever; `excludeInvoiceId` leaves out the bill
+     * being edited. Rows: product id, total pieces, number of pending bills.
+     */
+    @Query("""
+            SELECT it.product.id, COALESCE(SUM(it.quantity), 0), COUNT(DISTINCT i.id)
+            FROM SalesInvoiceItem it JOIN it.salesInvoice i
+            WHERE i.status = 'DRAFT' AND i.invoiceDate >= :since
+                AND (:excludeInvoiceId IS NULL OR i.id <> :excludeInvoiceId)
+            GROUP BY it.product.id
+            """)
+    List<Object[]> pendingDraftQuantities(@Param("since") LocalDate since, @Param("excludeInvoiceId") Long excludeInvoiceId);
 }
