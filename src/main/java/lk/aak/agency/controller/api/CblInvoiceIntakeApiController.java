@@ -48,7 +48,7 @@ public class CblInvoiceIntakeApiController {
         CblInvoiceIntakeService.Result result = intakeService.importInvoice(file.getBytes(), file.getOriginalFilename());
         HttpStatus status = switch (result.status()) {
             case CREATED -> HttpStatus.CREATED;
-            case DUPLICATE -> HttpStatus.OK;
+            case DUPLICATE, EMPTY -> HttpStatus.OK;
             case REJECTED -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
         return ResponseEntity.status(status).body(result);
