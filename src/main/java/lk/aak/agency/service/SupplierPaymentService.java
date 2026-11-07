@@ -20,6 +20,7 @@ public class SupplierPaymentService {
     private final PurchaseInvoiceRepository purchaseInvoiceRepository;
     private final RowLockService rowLockService;
     private final AuditLogService auditLogService;
+    private lk.aak.agency.credit.SupplierCreditNoteRepository creditNoteRepository;
 
     public SupplierPaymentService(
             SupplierPaymentRepository supplierPaymentRepository,
@@ -31,6 +32,19 @@ public class SupplierPaymentService {
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
         this.rowLockService = rowLockService;
         this.auditLogService = auditLogService;
+    }
+
+    /** With the credit notes the supplier has sent: the approved ones reduce what is owed (the 4-argument form counts none). */
+    @org.springframework.beans.factory.annotation.Autowired
+    public SupplierPaymentService(
+            SupplierPaymentRepository supplierPaymentRepository,
+            PurchaseInvoiceRepository purchaseInvoiceRepository,
+            RowLockService rowLockService,
+            AuditLogService auditLogService,
+            lk.aak.agency.credit.SupplierCreditNoteRepository creditNoteRepository) {
+
+        this(supplierPaymentRepository, purchaseInvoiceRepository, rowLockService, auditLogService);
+        this.creditNoteRepository = creditNoteRepository;
     }
 
     public BigDecimal getPaidAmount(Long purchaseInvoiceId) {
@@ -84,7 +98,8 @@ public class SupplierPaymentService {
             }
         }
 
-        return new SupplierBalanceSummary(rows, totalOwed, overpaidRows, totalOverpaid);
+        BigDecimal credits = creditNoteRepository == null ? BigDecimal.ZERO : zeroIfNull(creditNoteRepository.approvedTotal());
+        return new SupplierBalanceSummary(rows, totalOwed, overpaidRows, totalOverpaid, credits);
     }
 
     /*
@@ -166,14 +181,33 @@ public class SupplierPaymentService {
     public record SupplierOverpaymentRow(PurchaseInvoice invoice, BigDecimal paidAmount, BigDecimal overpaidAmount) {
     }
 
+    /**
+     * `totalOwed` is what the completed purchase invoices still owe; `creditNotesTotal` is what the APPROVED credit notes
+     * give back. `netOwed` (never below 0) is the figure the dashboard and reports show; a credit bigger than the debt
+     * is kept visible as `creditInFavour` and never hidden in a zero.
+     */
     public record SupplierBalanceSummary(
             List<SupplierBalanceRow> rows,
             BigDecimal totalOwed,
             List<SupplierOverpaymentRow> overpaidRows,
-            BigDecimal totalOverpaid) {
+            BigDecimal totalOverpaid,
+            BigDecimal creditNotesTotal) {
+
+        public SupplierBalanceSummary(List<SupplierBalanceRow> rows, BigDecimal totalOwed,
+                                      List<SupplierOverpaymentRow> overpaidRows, BigDecimal totalOverpaid) {
+            this(rows, totalOwed, overpaidRows, totalOverpaid, BigDecimal.ZERO);
+        }
 
         public SupplierBalanceSummary(List<SupplierBalanceRow> rows, BigDecimal totalOwed) {
-            this(rows, totalOwed, List.of(), BigDecimal.ZERO);
+            this(rows, totalOwed, List.of(), BigDecimal.ZERO, BigDecimal.ZERO);
+        }
+
+        public BigDecimal netOwed() {
+            return totalOwed.subtract(creditNotesTotal).max(BigDecimal.ZERO);
+        }
+
+        public BigDecimal creditInFavour() {
+            return creditNotesTotal.subtract(totalOwed).max(BigDecimal.ZERO);
         }
     }
 }

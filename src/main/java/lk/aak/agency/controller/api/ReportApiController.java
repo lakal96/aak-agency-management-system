@@ -139,7 +139,7 @@ public class ReportApiController {
                 totalPurchases,
                 totalPayments,
                 outstandingCredit,
-                supplierPaymentService.getSupplierBalanceSummary().totalOwed(),
+                supplierPaymentService.getSupplierBalanceSummary().netOwed(),
                 shopReturnsValue,
                 supplierReturnsValue,
                 salesInvoices.stream().filter(i -> "COMPLETED".equalsIgnoreCase(i.getStatus())).count(),

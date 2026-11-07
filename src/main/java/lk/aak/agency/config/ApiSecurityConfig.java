@@ -114,6 +114,7 @@ public class ApiSecurityConfig {
                                 "/api/v1/inventory/**",
                                 "/api/v1/stock-adjustments/**",
                                 "/api/v1/stock-batches/**",
+                                "/api/v1/supplier-credit-notes/**",
                                 "/api/v1/cheques/**",
                                 "/api/v1/collections/**",
                                 "/api/v1/shop-returns/**",
