@@ -18,6 +18,10 @@ public class PurchaseInvoiceItemResponse {
     private final BigDecimal invoicedQuantity;
     private final String invoicedUnit;
     private final BigDecimal invoicedUnitPrice;
+    private final boolean receivedConfirmed;
+    private final String receivedBy;
+    private final java.time.LocalDateTime receivedAt;
+    private final BigDecimal expectedQuantity;
 
     public PurchaseInvoiceItemResponse(PurchaseInvoiceItem item) {
         this.id = item.getId();
@@ -31,6 +35,10 @@ public class PurchaseInvoiceItemResponse {
         this.invoicedQuantity = item.getInvoicedQuantity();
         this.invoicedUnit = item.getInvoicedUnit();
         this.invoicedUnitPrice = item.getInvoicedUnitPrice();
+        this.receivedConfirmed = item.isReceivedConfirmed();
+        this.receivedBy = item.getReceivedBy();
+        this.receivedAt = item.getReceivedAt();
+        this.expectedQuantity = item.getExpectedQuantity();
     }
 
     public Long getId() {
@@ -59,6 +67,23 @@ public class PurchaseInvoiceItemResponse {
 
     public BigDecimal getAmount() {
         return amount;
+    }
+
+    public boolean isReceivedConfirmed() {
+        return receivedConfirmed;
+    }
+
+    public String getReceivedBy() {
+        return receivedBy;
+    }
+
+    public java.time.LocalDateTime getReceivedAt() {
+        return receivedAt;
+    }
+
+    /** The pieces the invoice said, when the quantity received was different (null when nothing differed). */
+    public BigDecimal getExpectedQuantity() {
+        return expectedQuantity;
     }
 
     public BigDecimal getInvoicedQuantity() {

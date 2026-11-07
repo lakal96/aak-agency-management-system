@@ -73,6 +73,7 @@ class StockBatchTest {
         PurchaseInvoice saved = purchaseService.saveInvoiceWithItems(invoice, List.of(items));
         var stored = fileService.storeFile(new MockMultipartFile("file", "i.pdf", "application/pdf", "%PDF-1.4 test".getBytes()));
         purchaseService.attachInvoiceFile(saved.getId(), stored);
+        purchaseService.getItemsByInvoiceId(saved.getId()).forEach(i -> purchaseService.receiveItem(saved.getId(), i.getId(), i.getQuantity(), "tester"));
         purchaseService.completeInvoice(saved.getId(), true);
         return saved;
     }

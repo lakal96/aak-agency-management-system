@@ -335,6 +335,14 @@ public class PurchaseInvoiceService {
             );
         }
 
+        long unchecked = items.stream().filter(item -> !item.isReceivedConfirmed()).count();
+        if (unchecked > 0) {
+            throw new IllegalArgumentException(
+                    "Check every line against the goods first: " + unchecked + " of " + items.size()
+                            + " line(s) are not ticked yet."
+            );
+        }
+
         recalculateInvoiceTotals(invoiceId);
 
         BigDecimal subtotal =
@@ -391,6 +399,92 @@ public class PurchaseInvoiceService {
 
         // remember what each received line cost, and the price that cost implies (phase 1: record only)
         stockBatchService.recordBatches(invoice, items);
+    }
+
+    /**
+     * Goods check: the goods of one line were counted. `receivedQuantity` is what really arrived. If it differs from the
+     * invoice, the line follows what arrived: its quantity becomes the received pieces and its amount is the invoiced
+     * amount in proportion (the invoice's own quantity and amount are kept to show "short by N" and to correct back).
+     * Any change also removes the whole-invoice verification: it has to be ticked again.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public PurchaseInvoiceItem receiveItem(Long invoiceId, Long itemId, BigDecimal receivedQuantity, String username) {
+
+        rowLockService.lockPurchaseInvoice(invoiceId);
+        PurchaseInvoice invoice = getInvoiceById(invoiceId);
+        requireDraftForGoodsCheck(invoice);
+
+        PurchaseInvoiceItem item = itemOf(invoiceId, itemId);
+
+        if (receivedQuantity == null || receivedQuantity.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "Enter the quantity that was received. If none of this product arrived, remove the line with Edit lines."
+            );
+        }
+        BigDecimal received = receivedQuantity.setScale(2, java.math.RoundingMode.HALF_UP);
+
+        if (item.getExpectedQuantity() == null) {
+            item.setExpectedQuantity(item.getQuantity());
+            item.setExpectedAmount(item.getAmount());
+        }
+        BigDecimal expectedQuantity = item.getExpectedQuantity();
+        BigDecimal expectedAmount = item.getExpectedAmount();
+        BigDecimal before = item.getQuantity();
+
+        BigDecimal newAmount = received.compareTo(expectedQuantity) == 0
+                ? expectedAmount
+                : expectedAmount.multiply(received).divide(expectedQuantity, 2, java.math.RoundingMode.HALF_UP);
+        item.setQuantity(received);
+        // keep an explicit amount only where quantity x unit price would not give it
+        BigDecimal byPrice = received.multiply(item.getUnitPrice()).setScale(2, java.math.RoundingMode.HALF_UP);
+        item.setInvoicedAmount(newAmount.compareTo(byPrice) == 0 ? null : newAmount);
+        item.calculateAmount();
+
+        item.setReceivedConfirmed(true);
+        item.setReceivedBy(username);
+        item.setReceivedAt(BusinessTime.now());
+        purchaseInvoiceItemRepository.save(item);
+        purchaseInvoiceItemRepository.flush();
+
+        resetInvoiceVerification(invoiceId);
+        recalculateInvoiceTotals(invoiceId);
+
+        String difference = received.compareTo(expectedQuantity) == 0 ? "as invoiced"
+                : (received.compareTo(expectedQuantity) < 0 ? "SHORT by " : "OVER by ") + received.subtract(expectedQuantity).abs().stripTrailingZeros().toPlainString();
+        auditLogService.record("PURCHASE_LINE_RECEIVED", "PurchaseInvoice", invoiceId,
+                invoice.getDocumentNumber() + ": " + item.getProduct().getProductName() + " received "
+                        + received.stripTrailingZeros().toPlainString() + " (" + difference + "), was " + before.stripTrailingZeros().toPlainString());
+        return item;
+    }
+
+    /** Takes the tick off a line (to count again); the whole-invoice verification goes too. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public PurchaseInvoiceItem unreceiveItem(Long invoiceId, Long itemId) {
+
+        rowLockService.lockPurchaseInvoice(invoiceId);
+        requireDraftForGoodsCheck(getInvoiceById(invoiceId));
+
+        PurchaseInvoiceItem item = itemOf(invoiceId, itemId);
+        item.setReceivedConfirmed(false);
+        item.setReceivedBy(null);
+        item.setReceivedAt(null);
+        purchaseInvoiceItemRepository.save(item);
+        purchaseInvoiceItemRepository.flush();
+        resetInvoiceVerification(invoiceId);
+        return item;
+    }
+
+    private void requireDraftForGoodsCheck(PurchaseInvoice invoice) {
+        if ("COMPLETED".equalsIgnoreCase(invoice.getStatus())) {
+            throw new IllegalArgumentException("A completed purchase invoice cannot be changed.");
+        }
+    }
+
+    private PurchaseInvoiceItem itemOf(Long invoiceId, Long itemId) {
+        return getItemsByInvoiceId(invoiceId).stream()
+                .filter(item -> item.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("That line is not on this purchase invoice."));
     }
 
     /*

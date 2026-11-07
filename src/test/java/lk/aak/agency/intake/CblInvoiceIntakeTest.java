@@ -115,6 +115,12 @@ class CblInvoiceIntakeTest {
         return productRepository.save(p);
     }
 
+    /** the goods were counted: every line ticked at the invoiced quantity */
+    private void tickAll(Long invoiceId) {
+        purchaseInvoiceService.getItemsByInvoiceId(invoiceId)
+                .forEach(i -> purchaseInvoiceService.receiveItem(invoiceId, i.getId(), i.getQuantity(), "tester"));
+    }
+
     private BigDecimal stockOf(Product product) {
         return inventoryService.getStockByProduct().getOrDefault(product.getId(), BigDecimal.ZERO);
     }
@@ -224,6 +230,7 @@ class CblInvoiceIntakeTest {
     @Test
     void aCompletedInvoiceCannotBeEdited() throws Exception {
         PurchaseInvoice invoice = draftFromEmail("26NOV_TEST_0000000013");
+        tickAll(invoice.getId());
         purchaseInvoiceService.completeInvoice(invoice.getId(), true);
         invoiceRepository.flush();   // in real life the completion has been committed before anyone edits
         var items = itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(invoice.getId());
@@ -284,6 +291,7 @@ class CblInvoiceIntakeTest {
         assertThat(stockOf(milk)).isEqualByComparingTo("0");
 
         // ... completing it (the person has compared the PDF) puts PIECES into stock and owes CBL the printed total
+        tickAll(invoice.getId());
         purchaseInvoiceService.completeInvoice(invoice.getId(), true);
         assertThat(stockOf(milk)).isEqualByComparingTo("2880");
         assertThat(stockOf(tempFingers)).isEqualByComparingTo("384");

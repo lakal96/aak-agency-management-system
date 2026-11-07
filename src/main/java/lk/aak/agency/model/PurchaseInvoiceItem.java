@@ -82,6 +82,23 @@ public class PurchaseInvoiceItem {
     @Column(name = "invoiced_amount", precision = 15, scale = 2)
     private BigDecimal invoicedAmount;
 
+    // Goods check: ticked once the goods of this line were counted. If the received quantity differed from the
+    // invoice, the quantity and amount above follow what was received and the invoice's own figures are kept here.
+    @Column(name = "received_confirmed", nullable = false)
+    private boolean receivedConfirmed;
+
+    @Column(name = "received_by", length = 100)
+    private String receivedBy;
+
+    @Column(name = "received_at")
+    private java.time.LocalDateTime receivedAt;
+
+    @Column(name = "expected_quantity", precision = 15, scale = 2)
+    private BigDecimal expectedQuantity;
+
+    @Column(name = "expected_amount", precision = 15, scale = 2)
+    private BigDecimal expectedAmount;
+
     public PurchaseInvoiceItem() {
     }
 
@@ -121,6 +138,16 @@ public class PurchaseInvoiceItem {
         calculateValues();
     }
 
+    public boolean isReceivedConfirmed() { return receivedConfirmed; }
+    public void setReceivedConfirmed(boolean receivedConfirmed) { this.receivedConfirmed = receivedConfirmed; }
+    public String getReceivedBy() { return receivedBy; }
+    public void setReceivedBy(String receivedBy) { this.receivedBy = receivedBy; }
+    public java.time.LocalDateTime getReceivedAt() { return receivedAt; }
+    public void setReceivedAt(java.time.LocalDateTime receivedAt) { this.receivedAt = receivedAt; }
+    public BigDecimal getExpectedQuantity() { return expectedQuantity; }
+    public void setExpectedQuantity(BigDecimal expectedQuantity) { this.expectedQuantity = expectedQuantity; }
+    public BigDecimal getExpectedAmount() { return expectedAmount; }
+    public void setExpectedAmount(BigDecimal expectedAmount) { this.expectedAmount = expectedAmount; }
     public BigDecimal getInvoicedQuantity() { return invoicedQuantity; }
     public void setInvoicedQuantity(BigDecimal invoicedQuantity) { this.invoicedQuantity = invoicedQuantity; }
     public String getInvoicedUnit() { return invoicedUnit; }
