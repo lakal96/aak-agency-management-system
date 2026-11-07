@@ -11,6 +11,8 @@ public class InventoryItemResponse {
     private final BigDecimal currentStock;
     private final BigDecimal reorderLevel;
     private final boolean lowStock;
+    private final BigDecimal reservedByDrafts;
+    private final int pendingBills;
 
     public InventoryItemResponse(
             Long productId,
@@ -19,7 +21,21 @@ public class InventoryItemResponse {
             String unit,
             BigDecimal currentStock,
             BigDecimal reorderLevel) {
+        this(productId, productCode, productName, unit, currentStock, reorderLevel, BigDecimal.ZERO, 0);
+    }
 
+    public InventoryItemResponse(
+            Long productId,
+            String productCode,
+            String productName,
+            String unit,
+            BigDecimal currentStock,
+            BigDecimal reorderLevel,
+            BigDecimal reservedByDrafts,
+            int pendingBills) {
+
+        this.reservedByDrafts = reservedByDrafts;
+        this.pendingBills = pendingBills;
         this.productId = productId;
         this.productCode = productCode;
         this.productName = productName;
@@ -27,6 +43,15 @@ public class InventoryItemResponse {
         this.currentStock = currentStock;
         this.reorderLevel = reorderLevel;
         this.lowStock = reorderLevel != null && currentStock.compareTo(reorderLevel) <= 0;
+    }
+
+    /** Pieces that other pending (draft) bills already ask for: not taken from stock yet, but spoken for. */
+    public BigDecimal getReservedByDrafts() {
+        return reservedByDrafts;
+    }
+
+    public int getPendingBills() {
+        return pendingBills;
     }
 
     public Long getProductId() {
