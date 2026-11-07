@@ -84,7 +84,7 @@ public class SalesInvoiceApiController {
         Page<SalesInvoice> invoices = salesInvoiceRepository.search(
                 q == null ? "" : q,
                 salesRepScopeService.resolveScopedEmployeeId(authentication),
-                PageRequest.of(Math.max(page, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "invoiceDate"))
+                PageRequest.of(Math.max(page, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "invoiceDate").and(Sort.by(Sort.Direction.DESC, "id")))
         );
 
         return PageResponse.from(invoices, SalesInvoiceResponse::new);

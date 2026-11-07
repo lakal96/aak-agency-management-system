@@ -18,6 +18,7 @@ public class PaymentResponse {
     private final String chequeNumber;
     private final LocalDate chequeDate;
     private final String bankName;
+    private final String referenceNumber;
     private final String status;
     private final String chequeStatus;
     private final String notes;
@@ -39,6 +40,7 @@ public class PaymentResponse {
         this.chequeNumber = payment.getChequeNumber();
         this.chequeDate = payment.getChequeDate();
         this.bankName = payment.getBankName();
+        this.referenceNumber = payment.getReferenceNumber();
         this.status = payment.getStatus();
         this.chequeStatus = payment.getChequeStatus();
         this.notes = payment.getNotes();
@@ -105,6 +107,11 @@ public class PaymentResponse {
 
     public String getStatus() {
         return status;
+    }
+
+    /** The transaction / reference number of a bank transfer. */
+    public String getReferenceNumber() {
+        return referenceNumber;
     }
 
     public String getChequeStatus() {
