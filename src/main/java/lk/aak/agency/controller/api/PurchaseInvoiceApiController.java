@@ -211,6 +211,23 @@ public class PurchaseInvoiceApiController {
                 .body(resource);
     }
 
+    /** Goods check: this line was counted; `quantity` is what really arrived (the invoice's own figure if all of it did). */
+    @PostMapping("/{id}/items/{itemId}/receive")
+    public PurchaseInvoiceDetailResponse receiveItem(@PathVariable Long id, @PathVariable Long itemId,
+                                                     @RequestBody java.util.Map<String, java.math.BigDecimal> body,
+                                                     java.security.Principal principal) {
+        purchaseInvoiceService.receiveItem(id, itemId, body == null ? null : body.get("quantity"),
+                principal == null ? "unknown" : principal.getName());
+        return toDetail(purchaseInvoiceRepository.findById(id).orElseThrow());
+    }
+
+    /** Takes the tick off a line so it can be counted again. */
+    @DeleteMapping("/{id}/items/{itemId}/receive")
+    public PurchaseInvoiceDetailResponse unreceiveItem(@PathVariable Long id, @PathVariable Long itemId) {
+        purchaseInvoiceService.unreceiveItem(id, itemId);
+        return toDetail(purchaseInvoiceRepository.findById(id).orElseThrow());
+    }
+
     @PostMapping("/{id}/complete")
     public PurchaseInvoiceResponse complete(
             @PathVariable Long id, @RequestParam(defaultValue = "false") boolean verificationConfirmed) {
