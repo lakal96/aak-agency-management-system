@@ -103,7 +103,7 @@ public class PurchaseInvoiceApiController {
 
         Page<PurchaseInvoice> invoices = purchaseInvoiceRepository.search(
                 q == null ? "" : q,
-                PageRequest.of(Math.max(page, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "invoiceDate"))
+                PageRequest.of(Math.max(page, 0), Math.max(size, 1), Sort.by(Sort.Direction.DESC, "invoiceDate").and(Sort.by(Sort.Direction.DESC, "id")))
         );
 
         return PageResponse.from(invoices, PurchaseInvoiceResponse::new);
