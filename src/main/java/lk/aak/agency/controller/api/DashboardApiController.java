@@ -157,7 +157,7 @@ public class DashboardApiController {
         // What the agency owes CBL and the audit trail are owner/office information, not a rep's.
         BigDecimal totalOwedToSupplier = repView
                 ? BigDecimal.ZERO
-                : supplierPaymentService.getSupplierBalanceSummary().totalOwed();
+                : supplierPaymentService.getSupplierBalanceSummary().netOwed();
 
         List<DashboardSummaryResponse.RecentActivity> recentActivity = repView
                 ? List.of()

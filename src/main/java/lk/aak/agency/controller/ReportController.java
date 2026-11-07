@@ -294,7 +294,7 @@ public class ReportController {
 
         model.addAttribute(
                 "totalOwedToSupplier",
-                supplierPaymentService.getSupplierBalanceSummary().totalOwed()
+                supplierPaymentService.getSupplierBalanceSummary().netOwed()
         );
 
         model.addAttribute(

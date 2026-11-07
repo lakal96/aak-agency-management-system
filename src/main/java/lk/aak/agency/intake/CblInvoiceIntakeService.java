@@ -34,11 +34,19 @@ public class CblInvoiceIntakeService {
 
     public enum Status { CREATED, DUPLICATE, EMPTY, REJECTED }
 
+    /** `kind` says what the file was: INVOICE (a product invoice) or CREDIT_NOTES (one or more supplier credit notes). */
     public record Result(Status status, Long invoiceId, String documentNumber, int lines, BigDecimal total,
-                         List<String> notes, List<String> problems) {
+                         List<String> notes, List<String> problems, String kind) {
+
+        public Result(Status status, Long invoiceId, String documentNumber, int lines, BigDecimal total,
+                      List<String> notes, List<String> problems) {
+            this(status, invoiceId, documentNumber, lines, total, notes, problems, "INVOICE");
+        }
     }
 
     private final CblInvoiceParser parser;
+    private final lk.aak.agency.credit.CreditNoteParser creditNoteParser;
+    private final lk.aak.agency.credit.SupplierCreditNoteService creditNoteService;
     private final ProductRepository productRepository;
     private final ProductService productService;
     private final PurchaseInvoiceRepository purchaseInvoiceRepository;
@@ -49,11 +57,14 @@ public class CblInvoiceIntakeService {
     private final Object lock = new Object();
     private final TransactionTemplate transaction;
 
-    public CblInvoiceIntakeService(CblInvoiceParser parser, ProductRepository productRepository, ProductService productService,
+    public CblInvoiceIntakeService(CblInvoiceParser parser, lk.aak.agency.credit.CreditNoteParser creditNoteParser,
+                                   lk.aak.agency.credit.SupplierCreditNoteService creditNoteService, ProductRepository productRepository, ProductService productService,
                                    PurchaseInvoiceRepository purchaseInvoiceRepository,
                                    PurchaseInvoiceService purchaseInvoiceService, PurchaseInvoiceFileService fileService,
                                    AuditLogService auditLogService, PlatformTransactionManager transactionManager) {
         this.parser = parser;
+        this.creditNoteParser = creditNoteParser;
+        this.creditNoteService = creditNoteService;
         this.productRepository = productRepository;
         this.productService = productService;
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
@@ -69,6 +80,12 @@ public class CblInvoiceIntakeService {
         if (pdf == null || pdf.length < 100 || pdf.length > MAX_PDF_BYTES.longValue()
                 || !new String(pdf, 0, 5, java.nio.charset.StandardCharsets.ISO_8859_1).startsWith("%PDF")) {
             return rejected(null, List.of("That is not a PDF file (or it is empty or too large)."));
+        }
+
+        // credit notes (the supplier's monthly discount notes, one per page) are a different document: draft credits
+        var credit = creditNoteParser.parse(pdf);
+        if (credit.isPresent()) {
+            return importCreditNotes(credit.get(), pdf, fileName);
         }
 
         CblDocument document = parser.parse(pdf);
@@ -224,6 +241,38 @@ public class CblInvoiceIntakeService {
     private static String safeName(String fileName, String invoiceNumber) {
         String base = fileName == null ? "" : fileName.replaceAll("[^A-Za-z0-9._-]", "_");
         return base.toLowerCase(Locale.ROOT).endsWith(".pdf") && base.length() > 4 ? base : "CBL-invoice-" + invoiceNumber + ".pdf";
+    }
+
+    private Result importCreditNotes(lk.aak.agency.credit.CreditNoteParser.Parsed parsed, byte[] pdf, String fileName) {
+
+        if (!parsed.problems().isEmpty() || parsed.notes().isEmpty()) {
+            return new Result(Status.REJECTED, null, null, 0, null, List.of(), parsed.problems(), "CREDIT_NOTES");
+        }
+        synchronized (lock) {
+            try {
+                var outcome = transaction.execute(status -> creditNoteService.importNotes(parsed.notes(),
+                        new ByteArrayMultipartFile(safeName(fileName, parsed.notes().get(0).documentNumber()), pdf), INTAKE_USER));
+                List<String> notes = new ArrayList<>();
+                BigDecimal total = BigDecimal.ZERO;
+                for (var note : outcome.created()) {
+                    notes.add("Credit note " + note.getDocumentNumber() + " Rs " + note.getAmount().toPlainString() + " (" + note.getRemarks()
+                            + "): draft made. Check it and approve it under Supplier balance.");
+                    total = total.add(note.getAmount());
+                }
+                for (String duplicate : outcome.duplicates()) {
+                    notes.add("Credit note " + duplicate + " was already recorded. Nothing changed.");
+                }
+                boolean any = !outcome.created().isEmpty();
+                String number = any ? outcome.created().get(0).getDocumentNumber() : outcome.duplicates().get(0);
+                return new Result(any ? Status.CREATED : Status.DUPLICATE, null, number,
+                        any ? outcome.created().size() : outcome.duplicates().size(), total, notes, List.of(), "CREDIT_NOTES");
+            } catch (IllegalArgumentException | IllegalStateException refused) {
+                return new Result(Status.REJECTED, null, null, 0, null, List.of(), List.of(String.valueOf(refused.getMessage())), "CREDIT_NOTES");
+            } catch (org.springframework.dao.DataIntegrityViolationException duplicate) {
+                return new Result(Status.REJECTED, null, null, 0, null, List.of(),
+                        List.of("The system refused to store these credit notes (they may have been imported at the same moment). Nothing was changed."), "CREDIT_NOTES");
+            }
+        }
     }
 
     private static Result rejected(String documentNumber, List<String> problems) {
