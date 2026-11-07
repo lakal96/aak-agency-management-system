@@ -331,6 +331,40 @@ class CblInvoiceIntakeTest {
     }
 
     @Test
+    void anInvoiceWithNoProductsAndAllTotalsZeroIsQuietlyEmptyAndCreatesNothing() throws Exception {
+        long invoices = invoiceRepository.count();
+        long products = productRepository.count();
+
+        CblInvoiceIntakeService.Result result = intake.importInvoice(
+                invoicePdf("26NOV_TEST_0000000020", new String[0][], "0.00", "0.00", "0.00"), "empty.pdf");
+
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.EMPTY);
+        assertThat(result.problems()).isEmpty();
+        assertThat(result.notes()).anyMatch(n -> n.contains("nothing to import"));
+        assertThat(invoiceRepository.count()).isEqualTo(invoices);
+        assertThat(productRepository.count()).isEqualTo(products);
+    }
+
+    @Test
+    void noProductRowsButMoneyOnTheInvoiceIsStillARefusal() throws Exception {
+        CblInvoiceIntakeService.Result result = intake.importInvoice(
+                invoicePdf("26NOV_TEST_0000000021", new String[0][], "5,000.00", "0.00", "5,000.00"), "odd.pdf");
+
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.REJECTED);
+        assertThat(String.join(" ", result.problems())).contains("No product rows were found");
+    }
+
+    @Test
+    void theAddressAnswers200EmptyForAnEmptyInvoice() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "empty.pdf", "application/pdf",
+                invoicePdf("26NOV_TEST_0000000022", new String[0][], "0.00", "0.00", "0.00"));
+
+        mockMvc.perform(multipart("/api/v1/purchase-invoices/email-intake").file(file).header("X-Intake-Token", TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EMPTY"));
+    }
+
+    @Test
     void somethingThatIsNotAnInvoiceIsRefused() throws Exception {
         assertThat(intake.importInvoice("hello".getBytes(), "x.pdf").status()).isEqualTo(CblInvoiceIntakeService.Status.REJECTED);
         Document doc = new Document();

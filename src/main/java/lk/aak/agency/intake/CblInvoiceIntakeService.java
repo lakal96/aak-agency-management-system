@@ -32,7 +32,7 @@ public class CblInvoiceIntakeService {
     public static final String INTAKE_USER = "email-intake";
     private static final BigDecimal MAX_PDF_BYTES = BigDecimal.valueOf(8L * 1024 * 1024);
 
-    public enum Status { CREATED, DUPLICATE, REJECTED }
+    public enum Status { CREATED, DUPLICATE, EMPTY, REJECTED }
 
     public record Result(Status status, Long invoiceId, String documentNumber, int lines, BigDecimal total,
                          List<String> notes, List<String> problems) {
@@ -77,6 +77,11 @@ public class CblInvoiceIntakeService {
         }
 
         CblDocument.Invoice parsed = document.invoice();
+        if (parsed.lines().isEmpty()) {
+            // a valid invoice with no products and all totals zero: nothing to import, and nothing to worry about
+            return new Result(Status.EMPTY, null, parsed.taxInvoiceNumber(), 0, BigDecimal.ZERO,
+                    List.of("This invoice has no products on it (all totals are 0.00), so there is nothing to import."), List.of());
+        }
         // one at a time: two copies of the same e-mail must never make two drafts
         synchronized (lock) {
             Optional<PurchaseInvoice> existing = purchaseInvoiceRepository.findByDocumentNumber(parsed.taxInvoiceNumber());

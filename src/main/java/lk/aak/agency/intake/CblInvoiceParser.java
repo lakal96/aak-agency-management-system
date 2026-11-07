@@ -114,7 +114,10 @@ public class CblInvoiceParser {
             lines.add(toLine(m, description.toString(), problems));
         }
 
-        if (lines.isEmpty()) problems.add("No product rows were found.");
+        // An invoice with no product rows is only "empty" (nothing to import) when every total on it is zero too;
+        // no rows but money on the invoice means rows were missed, which is a refusal.
+        boolean emptyInvoice = lines.isEmpty() && isZero(totalOrder) && isZero(supplyTotal) && isZero(inclVat) && isZero(discount);
+        if (lines.isEmpty() && !emptyInvoice) problems.add("No product rows were found.");
 
         // the numbers must agree with each other, or the document is refused
         BigDecimal sum = lines.stream().map(CblDocument.Line::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -187,6 +190,10 @@ public class CblInvoiceParser {
 
     private static CblDocument unreadable(String problem) {
         return new CblDocument(CblDocument.Kind.UNKNOWN, null, List.of(problem));
+    }
+
+    private static boolean isZero(BigDecimal value) {
+        return value != null && value.signum() == 0;
     }
 
     private static String first(Pattern pattern, String text) {
