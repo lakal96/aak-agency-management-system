@@ -37,7 +37,7 @@ public class InventoryService {
     public List<Product> getAllProducts() {
 
         return productRepository.findAll(
-                Sort.by("productName").ascending()
+                Sort.by("productName").ascending().and(Sort.by("id").ascending())
         );
     }
 
@@ -189,7 +189,7 @@ public class InventoryService {
     public List<StockMovement> getAllMovements() {
 
         return stockMovementRepository.findAll(
-                Sort.by("movementDate").descending()
+                Sort.by("movementDate").descending().and(Sort.by("id").descending())
         );
     }
 

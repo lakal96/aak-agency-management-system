@@ -38,7 +38,7 @@ public class CustomerService {
 
     public List<Customer> getAllCustomers() {
         return customerRepository.findAll(
-                Sort.by(Sort.Direction.ASC, "customerName")
+                Sort.by(Sort.Direction.ASC, "customerName").and(Sort.by(Sort.Direction.ASC, "id"))
         );
     }
 
@@ -49,7 +49,7 @@ public class CustomerService {
                 PageRequest.of(
                         Math.max(page, 0),
                         Math.max(size, 1),
-                        Sort.by(Sort.Direction.ASC, "customerName")
+                        Sort.by(Sort.Direction.ASC, "customerName").and(Sort.by(Sort.Direction.ASC, "id"))
                 )
         );
     }
@@ -61,7 +61,7 @@ public class CustomerService {
                 PageRequest.of(
                         Math.max(page, 0),
                         Math.max(size, 1),
-                        Sort.by(Sort.Direction.ASC, "customerName")
+                        Sort.by(Sort.Direction.ASC, "customerName").and(Sort.by(Sort.Direction.ASC, "id"))
                 )
         );
     }

@@ -69,7 +69,7 @@ public class DeliveryTripService {
     }
 
     public List<DeliveryTrip> getAllTrips() {
-        return deliveryTripRepository.findAll(Sort.by(Sort.Direction.DESC, "tripDate"));
+        return deliveryTripRepository.findAll(Sort.by(Sort.Direction.DESC, "tripDate").and(Sort.by(Sort.Direction.DESC, "id")));
     }
 
     /** True when the trip exists - does not load it, so a later lock-and-read sees fresh data. */

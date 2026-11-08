@@ -59,7 +59,7 @@ public class AuditLogService {
                 PageRequest.of(
                         Math.max(page, 0),
                         Math.max(size, 1),
-                        Sort.by(Sort.Direction.DESC, "createdAt")
+                        Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))
                 )
         );
     }

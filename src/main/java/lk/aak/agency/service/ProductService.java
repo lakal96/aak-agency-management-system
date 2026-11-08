@@ -49,7 +49,7 @@ public class ProductService {
                 Sort.by(
                         Sort.Direction.ASC,
                         "productName"
-                )
+                ).and(Sort.by(Sort.Direction.ASC, "id"))
         );
     }
 
@@ -59,7 +59,7 @@ public class ProductService {
                 PageRequest.of(
                         Math.max(page, 0),
                         Math.max(size, 1),
-                        Sort.by(Sort.Direction.ASC, "productName")
+                        Sort.by(Sort.Direction.ASC, "productName").and(Sort.by(Sort.Direction.ASC, "id"))
                 )
         );
     }
