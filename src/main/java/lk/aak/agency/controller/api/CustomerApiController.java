@@ -110,6 +110,36 @@ public class CustomerApiController {
         return PageResponse.from(customers, CustomerResponse::new);
     }
 
+    /** What the bill screen's shop picker needs about a shop - nothing about money. */
+    public record BillableShop(Long id, String customerCode, String customerName, String area, String phone, String status) {
+    }
+
+    /**
+     * Shops a bill can be written for: every ACTIVE shop, whoever it is assigned to (a sales rep may bill any shop).
+     * A rep gets name, code and area only (and the phone of their own shops), and cannot search by phone.
+     */
+    @GetMapping("/billable")
+    public PageResponse<BillableShop> billable(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int size,
+            @RequestParam(required = false) String q,
+            Authentication authentication) {
+
+        Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
+        if (SalesRepScopeService.NO_ACCESS_SENTINEL.equals(scopedEmployeeId)) {
+            // a rep login not linked to an employee record: nothing, as everywhere else
+            return PageResponse.from(Page.<Customer>empty(), shop -> null);
+        }
+        boolean everything = scopedEmployeeId == null;
+
+        Page<Customer> shops = customerService.searchBillable(q, everything, page, size);
+
+        return PageResponse.from(shops, shop -> new BillableShop(
+                shop.getId(), shop.getCustomerCode(), shop.getCustomerName(), shop.getArea(),
+                everything || scopedEmployeeId.equals(shop.getAssignedEmployeeId()) ? shop.getPhone() : null,
+                shop.getStatus()));
+    }
+
     @GetMapping("/{id}")
     public CustomerResponse getById(@PathVariable Long id, Authentication authentication) {
         Customer customer = customerService.getCustomerById(id)
@@ -143,10 +173,20 @@ public class CustomerApiController {
     public CustomerResponse scan(@PathVariable String qrCode, Authentication authentication) {
         Customer customer = customerService.getCustomerByQrCode(qrCode)
                 .orElseThrow(() -> new NoSuchElementException("No shop matches this QR code."));
-        // A rep scanning another rep's shop gets the same answer as an unknown code.
+        // A rep scanning another rep's shop can still bill it (any rep may bill any shop), but gets only what the bill
+        // needs - name, code, area - not the phone, credit limit or notes.
         Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
-        if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+        if (SalesRepScopeService.NO_ACCESS_SENTINEL.equals(scopedEmployeeId)) {
             throw new NoSuchElementException("No shop matches this QR code.");
+        }
+        if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+            Customer limited = new Customer();
+            limited.setId(customer.getId());
+            limited.setCustomerCode(customer.getCustomerCode());
+            limited.setCustomerName(customer.getCustomerName());
+            limited.setArea(customer.getArea());
+            limited.setStatus(customer.getStatus());
+            return new CustomerResponse(limited);
         }
         return new CustomerResponse(customer);
     }

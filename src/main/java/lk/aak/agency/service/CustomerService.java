@@ -66,6 +66,19 @@ public class CustomerService {
         );
     }
 
+    /** Active shops a bill can be written for, whoever they are assigned to (see CustomerRepository.searchBillable). */
+    public Page<Customer> searchBillable(String keyword, boolean withPhone, int page, int size) {
+        return customerRepository.searchBillable(
+                keyword == null ? "" : keyword.trim(),
+                withPhone,
+                PageRequest.of(
+                        Math.max(page, 0),
+                        Math.min(Math.max(size, 1), 100),
+                        Sort.by(Sort.Direction.ASC, "customerName").and(Sort.by(Sort.Direction.ASC, "id"))
+                )
+        );
+    }
+
     public Optional<Customer> getCustomerById(Long id) {
         return customerRepository.findById(id);
     }

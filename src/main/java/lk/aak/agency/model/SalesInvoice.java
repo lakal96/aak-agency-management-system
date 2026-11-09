@@ -86,6 +86,10 @@ public class SalesInvoice {
     @Column(name = "delivery_status")
     private String deliveryStatus;
 
+    // The sales rep who wrote this bill (employees.id); null when the office or owner wrote it. See V13.
+    @Column(name = "sales_rep_employee_id")
+    private Long salesRepEmployeeId;
+
     public SalesInvoice() {
     }
 
@@ -271,6 +275,14 @@ public class SalesInvoice {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Long getSalesRepEmployeeId() {
+        return salesRepEmployeeId;
+    }
+
+    public void setSalesRepEmployeeId(Long salesRepEmployeeId) {
+        this.salesRepEmployeeId = salesRepEmployeeId;
     }
 
     public Long getDeliveryTripId() {

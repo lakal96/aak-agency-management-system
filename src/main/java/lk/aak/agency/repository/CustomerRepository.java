@@ -47,6 +47,25 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
             Pageable pageable
     );
 
+    /*
+     * The shop picker on the bill screen: every ACTIVE shop, whoever it is assigned to - a sales rep may bill any
+     * shop. withPhone = false leaves the phone out of the search, so a rep cannot look up another rep's shop by phone.
+     */
+    @Query("""
+            SELECT c FROM Customer c
+            WHERE c.status = 'ACTIVE'
+                AND (:keyword IS NULL OR :keyword = ''
+                    OR LOWER(c.customerName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR LOWER(c.customerCode) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR LOWER(c.area) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR (:withPhone = true AND LOWER(c.phone) LIKE LOWER(CONCAT('%', :keyword, '%'))))
+            """)
+    Page<Customer> searchBillable(
+            @Param("keyword") String keyword,
+            @Param("withPhone") boolean withPhone,
+            Pageable pageable
+    );
+
     /** Row-locks one Customer (FOR UPDATE) so concurrent completions are serialised. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT x FROM Customer x WHERE x.id = :id")
