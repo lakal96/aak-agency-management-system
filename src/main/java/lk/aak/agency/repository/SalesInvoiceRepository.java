@@ -121,6 +121,21 @@ public interface SalesInvoiceRepository
 
     List<SalesInvoice> findByPaymentStatusIn(List<String> paymentStatuses);
 
+    /**
+     * Every COMPLETED bill that still has something to pay, with its shop and the money received so far, as
+     * {bill, shop, received}. One query for the whole credit follow-up (it used to ask once per shop, then once more
+     * per bill). "Received" counts only payments in status RECEIVED, exactly like PaymentRepository.calculatePaidAmount.
+     */
+    @Query("""
+            SELECT i, c, COALESCE((SELECT SUM(p.amount) FROM Payment p
+                                   WHERE p.salesInvoice = i AND UPPER(p.status) = 'RECEIVED'), 0)
+            FROM SalesInvoice i JOIN i.customer c
+            WHERE UPPER(i.status) = 'COMPLETED'
+              AND COALESCE(i.netAmount, 0) > COALESCE((SELECT SUM(p2.amount) FROM Payment p2
+                                   WHERE p2.salesInvoice = i AND UPPER(p2.status) = 'RECEIVED'), 0)
+            """)
+    List<Object[]> findOpenBalances();
+
     /** Row-locks one SalesInvoice (FOR UPDATE) so concurrent completions are serialised. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT x FROM SalesInvoice x WHERE x.id = :id")

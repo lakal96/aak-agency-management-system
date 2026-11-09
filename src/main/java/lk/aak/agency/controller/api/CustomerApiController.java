@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -270,25 +271,31 @@ public class CustomerApiController {
         BigDecimal totalOutstanding = BigDecimal.ZERO;
         BigDecimal totalOverdue = BigDecimal.ZERO;
 
+        // One query for every open bill (with what was received on it), grouped by shop - not one query per shop and per bill.
+        Map<Long, List<Object[]>> openByShop = new HashMap<>();
+        for (Object[] row : salesInvoiceRepository.findOpenBalances()) {
+            openByShop.computeIfAbsent(((Customer) row[1]).getId(), id -> new ArrayList<>()).add(row);
+        }
+
         for (Customer customer : customerService.getAllCustomers()) {
 
             if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
                 continue;
             }
 
-            List<SalesInvoice> creditInvoices = salesInvoiceRepository
-                    .findByCustomerIdOrderByInvoiceDateDesc(customer.getId()).stream()
-                    .filter(invoice -> "COMPLETED".equalsIgnoreCase(invoice.getStatus()))
-                    .filter(invoice -> PaymentService.isOwedSale(invoice, paymentService.getPaidAmount(invoice.getId())))
-                    .toList();
+            List<Object[]> creditInvoices = openByShop.getOrDefault(customer.getId(), List.of());
 
             BigDecimal customerOutstanding = BigDecimal.ZERO;
             BigDecimal customerOverdue = BigDecimal.ZERO;
             LocalDate oldestOverdueDueDate = null;
 
-            for (SalesInvoice invoice : creditInvoices) {
+            for (Object[] row : creditInvoices) {
+                SalesInvoice invoice = (SalesInvoice) row[0];
+                BigDecimal paidAmount = row[2] instanceof BigDecimal received ? received : new BigDecimal(row[2].toString());
+                if (!PaymentService.isOwedSale(invoice, paidAmount)) {
+                    continue;
+                }
                 BigDecimal netAmount = zeroIfNull(invoice.getNetAmount());
-                BigDecimal paidAmount = paymentService.getPaidAmount(invoice.getId());
                 BigDecimal balance = netAmount.subtract(paidAmount);
 
                 if (balance.compareTo(BigDecimal.ZERO) <= 0) {
