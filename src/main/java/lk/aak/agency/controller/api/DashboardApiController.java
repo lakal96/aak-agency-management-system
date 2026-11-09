@@ -79,9 +79,11 @@ public class DashboardApiController {
         // null = owner/office (everything); a rep with no linked employee record matches no shop.
         Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
         boolean repView = scopedEmployeeId != null;
+        // ...plus the bills that rep wrote themselves, even for another rep's shop (a rep may bill any shop).
         Predicate<SalesInvoice> invoiceVisible = invoice -> !repView
                 || (invoice.getCustomer() != null
-                && scopedEmployeeId.equals(invoice.getCustomer().getAssignedEmployeeId()));
+                && scopedEmployeeId.equals(invoice.getCustomer().getAssignedEmployeeId()))
+                || scopedEmployeeId.equals(invoice.getSalesRepEmployeeId());
 
         // A draft starts out UNPAID too, but nothing is owed until the bill is completed (the credit
         // limit check, credit follow-up and reports all count completed bills only).

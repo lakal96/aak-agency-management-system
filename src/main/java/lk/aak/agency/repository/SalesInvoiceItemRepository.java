@@ -30,7 +30,7 @@ public interface SalesInvoiceItemRepository
                 COALESCE(SUM(CASE WHEN i.grossAmount > 0 THEN it.amount * i.netAmount / i.grossAmount ELSE 0 END), 0)
             FROM SalesInvoiceItem it JOIN it.salesInvoice i LEFT JOIN i.customer c LEFT JOIN it.product p
             WHERE i.status = 'COMPLETED' AND i.invoiceDate BETWEEN :from AND :to
-                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId OR i.salesRepEmployeeId = :employeeId)
             GROUP BY COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorised')
             """)
     List<Object[]> completedSalesByCategory(

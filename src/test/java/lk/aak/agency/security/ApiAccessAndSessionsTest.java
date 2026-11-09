@@ -214,7 +214,7 @@ class ApiAccessAndSessionsTest {
     }
 
     @Test
-    void aRepCannotOpenAnotherRepsShopByQrCode() throws Exception {
+    void aRepScanningAnotherRepsShopGetsOnlyWhatABillNeeds() throws Exception {
         SystemUser rep = newUser("SALES_REP");
         Employee mine = newEmployee("Kamal", rep.getUsername(), "ACTIVE");
         Employee other = newEmployee("Nimal", uniq("someoneelse"), "ACTIVE");
@@ -222,7 +222,18 @@ class ApiAccessAndSessionsTest {
         Customer theirShop = newShop("Their Shop", other.getId());
 
         mockMvc.perform(as(get("/api/v1/customers/scan/" + myShop.getQrCode()), rep)).andExpect(status().isOk());
-        mockMvc.perform(as(get("/api/v1/customers/scan/" + theirShop.getQrCode()), rep)).andExpect(status().isNotFound());
+        // any rep may bill any shop, so scanning another rep's shop works - but gives only name, code and area
+        mockMvc.perform(as(get("/api/v1/customers/scan/" + theirShop.getQrCode()), rep))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(theirShop.getId()))
+                .andExpect(jsonPath("$.customerName").value("Their Shop"))
+                .andExpect(jsonPath("$.phone").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.creditLimit").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.notes").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.assignedEmployeeId").value(org.hamcrest.Matchers.nullValue()));
+        // ...and the shop itself still cannot be opened
+        mockMvc.perform(as(get("/api/v1/customers/" + theirShop.getId()), rep)).andExpect(status().isNotFound());
+        // a rep login not linked to an employee record still gets nothing
         mockMvc.perform(as(get("/api/v1/customers/scan/" + theirShop.getQrCode()), newUser("SALES_REP")))
                 .andExpect(status().isNotFound());
         mockMvc.perform(as(get("/api/v1/customers/scan/" + theirShop.getQrCode()), newUser("OFFICE")))

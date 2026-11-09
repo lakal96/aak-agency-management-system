@@ -53,7 +53,7 @@ public interface SalesInvoiceRepository
                 OR LOWER(i.routeCode) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(i.saleType) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(i.status) LIKE LOWER(CONCAT('%', :keyword, '%')))
-                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId OR i.salesRepEmployeeId = :employeeId)
             """)
     Page<SalesInvoice> search(
             @Param("keyword") String keyword,
@@ -92,7 +92,7 @@ public interface SalesInvoiceRepository
             SELECT i.invoiceDate, COUNT(i), COALESCE(SUM(i.netAmount), 0)
             FROM SalesInvoice i LEFT JOIN i.customer c
             WHERE i.status = 'COMPLETED' AND i.invoiceDate BETWEEN :from AND :to
-                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId OR i.salesRepEmployeeId = :employeeId)
             GROUP BY i.invoiceDate
             """)
     List<Object[]> completedTotalsByDay(
@@ -102,7 +102,7 @@ public interface SalesInvoiceRepository
             SELECT DISTINCT i.invoiceDate, c.id
             FROM SalesInvoice i JOIN i.customer c
             WHERE i.status = 'COMPLETED' AND i.invoiceDate BETWEEN :from AND :to
-                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId OR i.salesRepEmployeeId = :employeeId)
             """)
     List<Object[]> buyingCustomersByDay(
             @Param("from") LocalDate from, @Param("to") LocalDate to, @Param("employeeId") Long employeeId);
@@ -112,7 +112,7 @@ public interface SalesInvoiceRepository
             SELECT i.deliveryStatus, t.status, COUNT(i)
             FROM SalesInvoice i JOIN DeliveryTrip t ON t.id = i.deliveryTripId LEFT JOIN i.customer c
             WHERE t.tripDate = :day
-                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId)
+                AND (:employeeId IS NULL OR c.assignedEmployeeId = :employeeId OR i.salesRepEmployeeId = :employeeId)
             GROUP BY i.deliveryStatus, t.status
             """)
     List<Object[]> deliveryCountsForDay(@Param("day") LocalDate day, @Param("employeeId") Long employeeId);

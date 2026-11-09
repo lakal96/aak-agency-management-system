@@ -174,9 +174,15 @@ public class SalesInvoiceApiController {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new IllegalArgumentException("Selected shop was not found."));
 
+        // A sales rep may bill ANY active shop (reps swap shops), not only the ones assigned to them. A login that is
+        // not linked to an employee record still gets nothing (fail closed). The bill remembers which rep wrote it,
+        // so that rep keeps seeing it even when the shop belongs to another rep.
         Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
-        if (scopedEmployeeId != null && !scopedEmployeeId.equals(customer.getAssignedEmployeeId())) {
+        if (SalesRepScopeService.NO_ACCESS_SENTINEL.equals(scopedEmployeeId)) {
             throw new IllegalArgumentException("Selected shop was not found.");
+        }
+        if (scopedEmployeeId != null && invoice.getId() == null) {
+            invoice.setSalesRepEmployeeId(scopedEmployeeId);
         }
 
         invoice.setCustomer(customer);
@@ -218,8 +224,10 @@ public class SalesInvoiceApiController {
     private void assertVisible(SalesInvoice invoice, Authentication authentication) {
         Long scopedEmployeeId = salesRepScopeService.resolveScopedEmployeeId(authentication);
         Customer invoiceCustomer = invoice.getCustomer();
-        if (scopedEmployeeId != null
-                && (invoiceCustomer == null || !scopedEmployeeId.equals(invoiceCustomer.getAssignedEmployeeId()))) {
+        boolean ownShop = invoiceCustomer != null && scopedEmployeeId != null
+                && scopedEmployeeId.equals(invoiceCustomer.getAssignedEmployeeId());
+        boolean wroteIt = scopedEmployeeId != null && scopedEmployeeId.equals(invoice.getSalesRepEmployeeId());
+        if (scopedEmployeeId != null && !ownShop && !wroteIt) {
             throw new NoSuchElementException("Sales invoice not found.");
         }
     }
