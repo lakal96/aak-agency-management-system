@@ -81,7 +81,10 @@ public class ApiSecurityConfig {
                          * controller checks (and the address does not exist at all while no token is set).
                          * It can only create a DRAFT purchase invoice from a CBL PDF.
                          */
-                        .requestMatchers(HttpMethod.POST, "/api/v1/purchase-invoices/email-intake").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/purchase-invoices/email-intake",
+                                "/api/v1/purchase-invoices/email-intake/unread", "/api/v1/purchase-invoices/email-intake/heartbeat").permitAll()
+                        /* The CBL e-mail box (what arrived, what needs attention): office and owner only, never a sales rep. */
+                        .requestMatchers("/api/v1/cbl-email-intake/**").hasAnyRole("ADMIN", "OFFICE")
                         .requestMatchers("/api/v1/users/**", "/api/v1/audit-log/**").hasRole("ADMIN")
                         /*
                          * Approving or rejecting a return changes stock and what is owed, so it is
