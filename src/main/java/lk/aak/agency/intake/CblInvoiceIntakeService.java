@@ -88,7 +88,7 @@ public class CblInvoiceIntakeService {
             return importCreditNotes(credit.get(), pdf, fileName);
         }
 
-        CblDocument document = parser.parse(pdf);
+        CblDocument document = parser.parse(pdf, code -> productRepository.findByCblProductCode(code).map(Product::getProductName).orElse(null));
         if (!document.readable()) {
             return rejected(document.invoice() == null ? null : document.invoice().taxInvoiceNumber(), document.problems());
         }
