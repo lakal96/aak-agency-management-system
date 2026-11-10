@@ -338,6 +338,77 @@ class CblInvoiceIntakeTest {
         assertThat(String.join(" ", result.problems())).contains("do not match the invoiced quantity");
     }
 
+    private List<PurchaseInvoiceItem> itemsOf(CblInvoiceIntakeService.Result result) {
+        return itemRepository.findByPurchaseInvoiceIdOrderByIdAsc(result.invoiceId());
+    }
+
+    @Test
+    void aLineSoldInDozensNeedsNoPackSizeInItsName() throws Exception {
+        // the pack is written in a style the reader does not know ("30G X 18 X12"), but 90 dozen is 1,080 pieces whatever the pack
+        String[][] rows = {{"CK990077", "TEST GO CHOK CHOCOLATE 30G X 18 X12", "30G", "5.00", "90.00", "DZ", "100.00", "9,000.00"}};
+
+        CblInvoiceIntakeService.Result result = intake.importInvoice(
+                invoicePdf("26NOV_TEST_0000000020", rows, "9,000.00", "0.00", "9,000.00"), "dozens.pdf");
+
+        assertThat(result.problems()).isEmpty();
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.CREATED);
+        assertThat(itemsOf(result)).extracting(i -> i.getQuantity().intValue()).containsExactly(1080);
+        assertThat(itemsOf(result).get(0).getAmount()).isEqualByComparingTo("9000.00");
+    }
+
+    @Test
+    void boxesRoundedToTwoDecimalsAreNotARefusal() throws Exception {
+        // 54 DZ in boxes of 16 DZ is 3.375 boxes: CBL prints 3.38. 13 DZ in boxes of 12 DZ is 1.083 boxes: printed 1.08.
+        String[][] rows = {
+                {"CHS90010", "TEST BUBBLES 50GX16DZ - SACMI", "50G", "3.38", "54.00", "DZ", "10.00", "540.00"},
+                {"CHS90011", "TEST CASHEW 93GX12DZ- SPS", "93G", "1.08", "13.00", "DZ", "10.00", "130.00"}};
+
+        CblInvoiceIntakeService.Result result = intake.importInvoice(
+                invoicePdf("26NOV_TEST_0000000021", rows, "670.00", "0.00", "670.00"), "rounded.pdf");
+
+        assertThat(result.problems()).isEmpty();
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.CREATED);
+        assertThat(itemsOf(result)).extracting(i -> i.getQuantity().intValue()).containsExactly(648, 156);
+    }
+
+    @Test
+    void aRealDisagreementBetweenBoxesAndQuantityIsStillRefusedEvenWithTheRounding() throws Exception {
+        // 3.38 boxes of 16 DZ cannot be 60 DZ
+        String[][] rows = {{"CHS90012", "TEST BUBBLES 50GX16DZ - SACMI", "50G", "3.38", "60.00", "DZ", "10.00", "600.00"}};
+
+        CblInvoiceIntakeService.Result result = intake.importInvoice(
+                invoicePdf("26NOV_TEST_0000000022", rows, "600.00", "0.00", "600.00"), "wrong.pdf");
+
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.REJECTED);
+        assertThat(String.join(" ", result.problems())).contains("do not match the invoiced quantity");
+    }
+
+    @Test
+    void aMasterCartonLineTakesItsPackSizeFromTheProductListWhenTheInvoiceDoesNotShowIt() throws Exception {
+        product("CK990051", "TEST PARTY PACK 150GX12EA");
+        String[][] rows = {{"CK990051", "TEST PARTY PACK", "150G", "6.00", "6.00", "MC", "100.00", "600.00"}};
+
+        CblInvoiceIntakeService.Result result = intake.importInvoice(
+                invoicePdf("26NOV_TEST_0000000023", rows, "600.00", "0.00", "600.00"), "party.pdf");
+
+        assertThat(result.problems()).isEmpty();
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.CREATED);
+        assertThat(itemsOf(result)).extracting(i -> i.getQuantity().intValue()).containsExactly(72);   // 6 cartons x 12
+    }
+
+    @Test
+    void aMasterCartonLineWithNoPackSizeAnywhereIsRefusedWithAMessageThatSaysWhatToDo() throws Exception {
+        String[][] rows = {{"CK990052", "TEST PARTY PACK", "150G", "6.00", "6.00", "MC", "100.00", "600.00"}};
+
+        CblInvoiceIntakeService.Result result = intake.importInvoice(
+                invoicePdf("26NOV_TEST_0000000024", rows, "600.00", "0.00", "600.00"), "nopack.pdf");
+
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.REJECTED);
+        assertThat(String.join(" ", result.problems()))
+                .contains("master cartons").contains("neither in the product name on the invoice nor in your product list").contains("enter this invoice by hand");
+        assertThat(invoiceRepository.findAll()).extracting(PurchaseInvoice::getTaxInvoiceNumber).doesNotContain("26NOV_TEST_0000000024");
+    }
+
     @Test
     void anInvoiceWithNoProductsAndAllTotalsZeroIsQuietlyEmptyAndCreatesNothing() throws Exception {
         long invoices = invoiceRepository.count();

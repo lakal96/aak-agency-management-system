@@ -13,6 +13,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -53,6 +54,14 @@ public class CblInvoiceParser {
     private static final Pattern PACK = Pattern.compile("X\\s*(\\d+)\\s*(DZ|EA)\\b", Pattern.CASE_INSENSITIVE);
 
     public CblDocument parse(byte[] pdf) {
+        return parse(pdf, code -> null);
+    }
+
+    /**
+     * @param productNameByCode what the AAK product list calls a product (null when unknown): used to find a pack size
+     *                          that the invoice's own product name does not show
+     */
+    public CblDocument parse(byte[] pdf, Function<String, String> productNameByCode) {
 
         String text;
         try (PDDocument document = Loader.loadPDF(pdf)) {
@@ -62,11 +71,15 @@ public class CblInvoiceParser {
         } catch (IOException | RuntimeException exception) {
             return unreadable("The file could not be opened as a PDF.");
         }
-        return parseText(text);
+        return parseText(text, productNameByCode);
     }
 
     /** The reading rules, on the extracted text (so they can be tested without a PDF). */
     public CblDocument parseText(String text) {
+        return parseText(text, code -> null);
+    }
+
+    public CblDocument parseText(String text, Function<String, String> productNameByCode) {
 
         if (!text.contains("Tax Invoice Number") || !text.contains("Description of Goods")) {
             return unreadable("This does not look like a CBL product invoice (no 'Tax Invoice Number' / product table).");
@@ -111,7 +124,7 @@ public class CblInvoiceParser {
                 taken++;
             }
             i += taken;
-            lines.add(toLine(m, description.toString(), problems));
+            lines.add(toLine(m, description.toString(), problems, productNameByCode));
         }
 
         // An invoice with no product rows is only "empty" (nothing to import) when every total on it is zero too;
@@ -136,7 +149,7 @@ public class CblInvoiceParser {
         return new CblDocument(CblDocument.Kind.INVOICE, invoice, List.copyOf(problems));
     }
 
-    private CblDocument.Line toLine(Matcher m, String rawDescription, List<String> problems) {
+    private CblDocument.Line toLine(Matcher m, String rawDescription, List<String> problems, Function<String, String> productNameByCode) {
 
         String code = m.group(1);
         String description = rawDescription.replaceAll("\\s+", " ").trim();
@@ -147,28 +160,52 @@ public class CblInvoiceParser {
         BigDecimal unitPrice = money(m.group(7));
         BigDecimal amount = money(m.group(8));
 
-        BigDecimal pieces = null;
+        // The pack size (X24DZ = 24 dozen per box, X12EA = 12 pieces per box): from the invoice's product name, or - when the
+        // invoice does not show it - from what the AAK product list calls this code.
         Matcher pack = PACK.matcher(description);
-        if (!pack.find()) {
-            problems.add(code + ": the pack size (like X24DZ or X12EA) is not in the product name, so the pieces cannot be worked out.");
-        } else {
-            BigDecimal perBox = new BigDecimal(pack.group(1)).multiply("DZ".equalsIgnoreCase(pack.group(2)) ? TWELVE : BigDecimal.ONE);
-            pieces = boxes.multiply(perBox);
-            // the invoiced quantity must agree with boxes x pack: DZ = dozens, MC = master cartons (boxes)
-            BigDecimal expectedQuantity;
-            if ("DZ".equals(unit)) {
-                expectedQuantity = pieces.divide(TWELVE, 2, java.math.RoundingMode.HALF_UP);
-            } else if ("MC".equals(unit)) {
-                expectedQuantity = boxes;
+        boolean packOnInvoice = pack.find();
+        if (!packOnInvoice) {
+            String known = productNameByCode == null ? null : productNameByCode.apply(code);
+            Matcher fromList = known == null ? null : PACK.matcher(known);
+            if (fromList != null && fromList.find()) pack = fromList;
+            else pack = null;
+        }
+        String packText = pack == null ? null : pack.group(1) + pack.group(2).toUpperCase();
+        BigDecimal piecesPerBox = pack == null ? null
+                : new BigDecimal(pack.group(1)).multiply("DZ".equalsIgnoreCase(pack.group(2)) ? TWELVE : BigDecimal.ONE);
+
+        BigDecimal pieces = null;
+        if ("DZ".equals(unit)) {
+            // A dozen is always 12 pieces, so a line sold in dozens needs no pack size at all.
+            BigDecimal exact = quantity.multiply(TWELVE);
+            if (exact.stripTrailingZeros().scale() > 0) {
+                problems.add(code + ": " + quantity + " DZ is not a whole number of pieces.");
             } else {
-                problems.add(code + ": the unit \"" + unit + "\" is not one I know (DZ or MC).");
-                expectedQuantity = quantity;
-                pieces = null;
+                pieces = exact.setScale(0, java.math.RoundingMode.UNNECESSARY);
             }
-            if (pieces != null && quantity.subtract(expectedQuantity).abs().compareTo(new BigDecimal("0.01")) > 0) {
-                problems.add(code + ": " + boxes + " boxes of " + pack.group(1) + pack.group(2).toUpperCase() + " do not match the invoiced quantity " + quantity + " " + unit + ".");
-                pieces = null;
+            // When the pack size is known it is a cross-check on the figures. CBL prints the number of boxes rounded to 2 decimals
+            // (3.38 boxes of 16DZ for exactly 54 DZ), so allow for that rounding - and refuse a real disagreement.
+            if (pieces != null && piecesPerBox != null) {
+                BigDecimal perBoxInDozens = piecesPerBox.divide(TWELVE, 6, java.math.RoundingMode.HALF_UP);
+                BigDecimal expectedQuantity = boxes.multiply(perBoxInDozens);
+                BigDecimal allowed = perBoxInDozens.multiply(new BigDecimal("0.005")).add(new BigDecimal("0.01"));
+                if (quantity.subtract(expectedQuantity).abs().compareTo(allowed) > 0) {
+                    problems.add(code + ": " + boxes + " boxes of " + packText + " do not match the invoiced quantity " + quantity + " " + unit + ".");
+                    pieces = null;
+                }
             }
+        } else if ("MC".equals(unit)) {
+            // Master cartons: the pieces are boxes x the pack size, so here the pack size is really needed.
+            if (piecesPerBox == null) {
+                problems.add(code + ": this line is counted in master cartons (MC), but its pack size (like X12EA) is neither in the product name on the invoice "
+                        + "nor in your product list, so the pieces cannot be worked out. Add the pack size to the product's name in Products, or enter this invoice by hand.");
+            } else if (quantity.subtract(boxes).abs().compareTo(new BigDecimal("0.01")) > 0) {
+                problems.add(code + ": " + boxes + " boxes of " + packText + " do not match the invoiced quantity " + quantity + " " + unit + ".");
+            } else {
+                pieces = boxes.multiply(piecesPerBox);
+            }
+        } else {
+            problems.add(code + ": the unit \"" + unit + "\" is not one I know (DZ or MC).");
         }
 
         // CBL prints a rounded unit price, so quantity x price may differ from the amount by a little - but not by much
