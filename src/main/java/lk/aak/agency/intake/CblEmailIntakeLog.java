@@ -35,6 +35,16 @@ public class CblEmailIntakeLog {
     /** The script checks every 30 minutes; three hours of silence is a stopped script, not a quiet inbox. */
     static final Duration CHECKER_STALE_AFTER = Duration.ofHours(3);
 
+    /** What the Gmail script knows about the e-mail itself. Every part is optional. */
+    public record Mail(String subject, String sender, LocalDateTime sentAt) {
+        public static Mail ofSubject(String subject) {
+            return new Mail(subject, null, null);
+        }
+    }
+
+    public record Counts(long all, long attention, long imported, long handled, long empty) {
+    }
+
     public record Summary(long needsAttention, LocalDateTime lastImportedAt, LocalDateTime lastCheckedAt, String checkerStatus) {
     }
 
@@ -54,6 +64,13 @@ public class CblEmailIntakeLog {
     /** Called with whatever the intake answered for a PDF. Never throws: keeping the record must not change the answer. */
     @Transactional
     public void recordOutcome(CblInvoiceIntakeService.Result result, byte[] pdf, String fileName, String subject) {
+        recordOutcome(result, pdf, fileName, Mail.ofSubject(subject));
+    }
+
+    /** Called with whatever the intake answered for a PDF. Never throws: keeping the record must not change the answer. */
+    @Transactional
+    public void recordOutcome(CblInvoiceIntakeService.Result result, byte[] pdf, String fileName, Mail mail) {
+        String subject = mail == null ? null : mail.subject();
         try {
             String hash = sha256(pdf);
             String kind = result.kind() == null ? "INVOICE" : result.kind();
@@ -61,7 +78,8 @@ public class CblEmailIntakeLog {
             switch (result.status()) {
                 case CREATED -> {
                     resolveEarlier(hash, "Imported later: the system can now read it.");
-                    CblEmailIntake row = newRow(kind, CblEmailIntake.IMPORTED, fileName, subject, hash);
+                    CblEmailIntake row = newRow(kind, CblEmailIntake.IMPORTED, fileName, mail, hash);
+                    keepFile(row, pdf, fileName);
                     row.setDocumentNumber(result.documentNumber());
                     row.setPurchaseInvoiceId(result.invoiceId());
                     row.setSummary(credit
@@ -79,7 +97,8 @@ public class CblEmailIntakeLog {
                 case EMPTY -> {
                     resolveEarlier(hash, "Nothing to import: it has no products on it.");
                     if (repository.findFirstByFileHashAndStatusOrderByIdDesc(hash, CblEmailIntake.EMPTY).isEmpty()) {
-                        CblEmailIntake row = newRow(kind, CblEmailIntake.EMPTY, fileName, subject, hash);
+                        CblEmailIntake row = newRow(kind, CblEmailIntake.EMPTY, fileName, mail, hash);
+                        keepFile(row, pdf, fileName);
                         row.setDocumentNumber(result.documentNumber());
                         row.setSummary("An invoice with no products on it (all totals 0.00): nothing to import.");
                         row.setResolved(true);
@@ -88,7 +107,7 @@ public class CblEmailIntakeLog {
                         repository.save(row);
                     }
                 }
-                case REJECTED -> needsAttention(kind, fileName, subject, hash, pdf, result.documentNumber(), result.problems());
+                case REJECTED -> needsAttention(kind, fileName, mail, hash, pdf, result.documentNumber(), result.problems());
             }
         } catch (RuntimeException exception) {
             LOGGER.warn("Could not record the CBL e-mail outcome: {}", exception.toString());
@@ -98,6 +117,12 @@ public class CblEmailIntakeLog {
     /** The Gmail script found an e-mail from CBL it could not use at all (no PDF, a subject it does not know...). Told once per e-mail. */
     @Transactional
     public void recordUnread(String messageKey, String subject, String reason) {
+        recordUnread(messageKey, Mail.ofSubject(subject), reason);
+    }
+
+    @Transactional
+    public void recordUnread(String messageKey, Mail mail, String reason) {
+        String subject = mail == null ? null : mail.subject();
         String key = clip(messageKey == null || messageKey.isBlank() ? subject : messageKey, 100);
         Optional<CblEmailIntake> existing = key == null ? Optional.empty() : repository.findByMessageKey(key);
         if (existing.isPresent()) {
@@ -107,7 +132,7 @@ public class CblEmailIntakeLog {
             repository.save(row);
             return;
         }
-        CblEmailIntake row = newRow("OTHER", CblEmailIntake.NEEDS_ATTENTION, null, subject, null);
+        CblEmailIntake row = newRow("OTHER", CblEmailIntake.NEEDS_ATTENTION, null, mail, null);
         row.setMessageKey(key);
         row.setProblems(clip(reason == null || reason.isBlank() ? "The e-mail could not be used." : reason, 2000));
         row.setSummary("An e-mail from CBL that the system could not use.");
@@ -142,6 +167,24 @@ public class CblEmailIntakeLog {
     }
 
     @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<CblEmailIntake> search(String filter, String query, int page, int size) {
+        String f = filter == null ? "all" : filter.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!List.of("all", "attention", "imported", "handled", "empty").contains(f)) {
+            f = "all";
+        }
+        String q = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);   // a typed % or _ only widens the match; the value is bound, never pasted into the query
+        return repository.search(f, "%" + q + "%", org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)),
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")));
+    }
+
+    @Transactional(readOnly = true)
+    public Counts counts() {
+        long needs = repository.countByStatusAndResolvedFalse(CblEmailIntake.NEEDS_ATTENTION);
+        long handled = repository.countByStatusAndResolvedTrue(CblEmailIntake.NEEDS_ATTENTION);
+        return new Counts(repository.count(), needs, repository.countByStatus(CblEmailIntake.IMPORTED), handled, repository.countByStatus(CblEmailIntake.EMPTY));
+    }
+
+    @Transactional(readOnly = true)
     public CblEmailIntake get(Long id) {
         return repository.findById(id).orElseThrow(() -> new NoSuchElementException("That CBL e-mail record was not found."));
     }
@@ -163,7 +206,7 @@ public class CblEmailIntakeLog {
 
     // ------------------------------------------------------------------------------------------------------------
 
-    private void needsAttention(String kind, String fileName, String subject, String hash, byte[] pdf, String documentNumber, List<String> problems) {
+    private void needsAttention(String kind, String fileName, Mail mail, String hash, byte[] pdf, String documentNumber, List<String> problems) {
         String text = clip(String.join("\n", problems == null || problems.isEmpty() ? List.of("The file could not be read.") : problems), 4000);
         Optional<CblEmailIntake> existing = repository.findFirstByFileHashAndStatusOrderByIdDesc(hash, CblEmailIntake.NEEDS_ATTENTION);
         if (existing.isPresent()) {
@@ -180,15 +223,11 @@ public class CblEmailIntakeLog {
             repository.save(row);
             return;
         }
-        CblEmailIntake row = newRow(kind, CblEmailIntake.NEEDS_ATTENTION, fileName, subject, hash);
+        CblEmailIntake row = newRow(kind, CblEmailIntake.NEEDS_ATTENTION, fileName, mail, hash);
         row.setDocumentNumber(documentNumber);
         row.setProblems(text);
         row.setSummary("A CBL " + ("CREDIT_NOTES".equals(kind) ? "credit note file" : "invoice") + " the system could not read exactly, so nothing was imported.");
-        try {
-            row.setStoredFileName(fileService.storeFile(new ByteArrayMultipartFile(safeName(fileName), pdf)).storedFileName());
-        } catch (RuntimeException exception) {
-            LOGGER.warn("Could not keep the refused CBL PDF: {}", exception.toString());
-        }
+        keepFile(row, pdf, fileName);
         repository.save(row);
         auditLogService.recordAs(CblInvoiceIntakeService.INTAKE_USER, "CBL_EMAIL_NEEDS_ATTENTION", "CblEmail", row.getId(),
                 "A CBL " + ("CREDIT_NOTES".equals(kind) ? "credit note file" : "invoice") + (fileName == null ? "" : " (" + clip(fileName, 60) + ")")
@@ -208,14 +247,29 @@ public class CblEmailIntakeLog {
         });
     }
 
-    private CblEmailIntake newRow(String kind, String status, String fileName, String subject, String hash) {
+    private CblEmailIntake newRow(String kind, String status, String fileName, Mail mail, String hash) {
         CblEmailIntake row = new CblEmailIntake();
         row.setKind(kind);
         row.setStatus(status);
         row.setFileName(clip(fileName, 255));
-        row.setEmailSubject(clip(subject, 300));
+        row.setEmailSubject(clip(mail == null ? null : mail.subject(), 300));
+        row.setEmailSender(clip(mail == null ? null : mail.sender(), 200));
+        row.setEmailSentAt(mail == null ? null : mail.sentAt());
         row.setFileHash(hash);
         return row;
+    }
+
+    /** Keeps a copy of the PDF with the record, so a person can open or download what CBL sent, whatever came of it. */
+    private void keepFile(CblEmailIntake row, byte[] pdf, String fileName) {
+        if (pdf == null || pdf.length == 0) {
+            return;
+        }
+        try {
+            row.setStoredFileName(fileService.storeFile(new ByteArrayMultipartFile(safeName(fileName), pdf)).storedFileName());
+            row.setFileSize((long) pdf.length);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Could not keep the CBL PDF: {}", exception.toString());
+        }
     }
 
     private static String safeName(String fileName) {

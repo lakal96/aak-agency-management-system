@@ -17,6 +17,8 @@ public interface PurchaseInvoiceRepository
 
     Optional<PurchaseInvoice> findByDocumentNumber(String documentNumber);
 
+    List<PurchaseInvoice> findByStatusOrderByIdDesc(String status);
+
     boolean existsByDocumentNumber(String documentNumber);
 
     List<PurchaseInvoice> findAllByOrderByInvoiceDateDesc();

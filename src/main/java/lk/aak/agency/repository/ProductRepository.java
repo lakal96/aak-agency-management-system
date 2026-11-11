@@ -24,6 +24,8 @@ public interface ProductRepository
     @Query("SELECT p FROM Product p WHERE p.id IN :ids ORDER BY p.id")
     List<Product> lockAllByIdOrdered(@Param("ids") Collection<Long> ids);
 
+    long countByStatusAndStandardSellingPrice(String status, java.math.BigDecimal standardSellingPrice);
+
     Optional<Product> findByCblProductCode(
             String cblProductCode
     );

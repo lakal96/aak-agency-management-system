@@ -43,6 +43,16 @@ public class CblEmailIntake {
     @Column(name = "email_subject", length = 300)
     private String emailSubject;
 
+    @Column(name = "email_sender", length = 200)
+    private String emailSender;
+
+    /** When CBL's e-mail was sent (from Gmail), which can be well before the system received it. */
+    @Column(name = "email_sent_at")
+    private LocalDateTime emailSentAt;
+
+    @Column(name = "file_size")
+    private Long fileSize;
+
     @Column(name = "message_key", length = 100)
     private String messageKey;
 
@@ -91,6 +101,12 @@ public class CblEmailIntake {
     public void setFileName(String fileName) { this.fileName = fileName; }
     public String getEmailSubject() { return emailSubject; }
     public void setEmailSubject(String emailSubject) { this.emailSubject = emailSubject; }
+    public String getEmailSender() { return emailSender; }
+    public void setEmailSender(String emailSender) { this.emailSender = emailSender; }
+    public LocalDateTime getEmailSentAt() { return emailSentAt; }
+    public void setEmailSentAt(LocalDateTime emailSentAt) { this.emailSentAt = emailSentAt; }
+    public Long getFileSize() { return fileSize; }
+    public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
     public String getMessageKey() { return messageKey; }
     public void setMessageKey(String messageKey) { this.messageKey = messageKey; }
     public String getFileHash() { return fileHash; }

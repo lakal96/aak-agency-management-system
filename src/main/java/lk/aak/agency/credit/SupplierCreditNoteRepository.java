@@ -14,6 +14,8 @@ public interface SupplierCreditNoteRepository extends JpaRepository<SupplierCred
 
     Optional<SupplierCreditNote> findByDocumentNumber(String documentNumber);
 
+    long countByStatus(String status);
+
     List<SupplierCreditNote> findAllByOrderByNoteDateDescIdDesc();
 
     /** Locks the row, so two people approving or deleting the same note queue up and the second sees the result. */

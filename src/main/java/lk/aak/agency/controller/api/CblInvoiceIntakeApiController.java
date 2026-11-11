@@ -39,7 +39,23 @@ public class CblInvoiceIntakeApiController {
     }
 
     /** What the script says about an e-mail from CBL that it could not use at all. */
-    public record UnreadReport(String messageKey, String subject, String reason) {
+    public record UnreadReport(String messageKey, String subject, String reason, String sender, String sentAt) {
+    }
+
+    /** The script sends the e-mail's own date as an ISO timestamp (with or without an offset); anything unreadable is simply left out. */
+    static java.time.LocalDateTime parseSentAt(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return java.time.OffsetDateTime.parse(value.trim()).atZoneSameInstant(lk.aak.agency.util.BusinessTime.ZONE).toLocalDateTime();
+        } catch (java.time.format.DateTimeParseException notOffset) {
+            try {
+                return java.time.LocalDateTime.parse(value.trim());
+            } catch (java.time.format.DateTimeParseException unreadable) {
+                return null;
+            }
+        }
     }
 
     /** 404 while the e-mail intake is switched off (no token on the server), 401 for a wrong token, null when the caller may go on. */
@@ -58,7 +74,9 @@ public class CblInvoiceIntakeApiController {
     public ResponseEntity<CblInvoiceIntakeService.Result> intake(
             @RequestHeader(value = "X-Intake-Token", required = false) String suppliedToken,
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "subject", required = false) String subject) throws IOException {
+            @RequestParam(value = "subject", required = false) String subject,
+            @RequestParam(value = "sender", required = false) String sender,
+            @RequestParam(value = "sentAt", required = false) String sentAt) throws IOException {
 
         HttpStatus refused = refuse(suppliedToken);
         if (refused != null) {
@@ -67,7 +85,7 @@ public class CblInvoiceIntakeApiController {
 
         byte[] bytes = file.getBytes();
         CblInvoiceIntakeService.Result result = intakeService.importInvoice(bytes, file.getOriginalFilename());
-        emailLog.recordOutcome(result, bytes, file.getOriginalFilename(), subject);
+        emailLog.recordOutcome(result, bytes, file.getOriginalFilename(), new CblEmailIntakeLog.Mail(subject, sender, parseSentAt(sentAt)));
         HttpStatus status = switch (result.status()) {
             case CREATED -> HttpStatus.CREATED;
             case DUPLICATE, EMPTY -> HttpStatus.OK;
@@ -84,7 +102,7 @@ public class CblInvoiceIntakeApiController {
         if (refused != null) {
             return ResponseEntity.status(refused).build();
         }
-        emailLog.recordUnread(report.messageKey(), report.subject(), report.reason());
+        emailLog.recordUnread(report.messageKey(), new CblEmailIntakeLog.Mail(report.subject(), report.sender(), parseSentAt(report.sentAt())), report.reason());
         return ResponseEntity.noContent().build();
     }
 

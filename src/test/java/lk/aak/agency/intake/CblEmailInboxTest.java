@@ -60,7 +60,7 @@ class CblEmailInboxTest {
 
     // ------------------------------------------------------------ made-up invoices laid out like the real PDF
 
-    private static byte[] invoicePdf(String number, String[][] rows, String total) throws Exception {
+    static byte[] invoicePdf(String number, String[][] rows, String total) throws Exception {
         Document doc = new Document(PageSize.A4, 30, 30, 30, 30);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PdfWriter.getInstance(doc, out);
@@ -90,11 +90,11 @@ class CblEmailInboxTest {
     }
 
     /** a master-carton line with no pack size anywhere: refused until the product list knows its pack */
-    private static byte[] refusedPdf(String number) throws Exception {
+    static byte[] refusedPdf(String number) throws Exception {
         return invoicePdf(number, new String[][]{{"CK990052", "TEST PARTY PACK", "150G", "6.00", "6.00", "MC", "100.00", "600.00"}}, "600.00");
     }
 
-    private static byte[] goodPdf(String number) throws Exception {
+    static byte[] goodPdf(String number) throws Exception {
         return invoicePdf(number, new String[][]{{"CHS90001", "TEST CHOCOLA MILK 20GX24DZ - SACMI", "20G", "10.00", "240.00", "DZ", "10.00", "2,400.00"}}, "2,400.00");
     }
 
