@@ -2,6 +2,7 @@ package lk.aak.agency.controller.api;
 
 import lk.aak.agency.intake.CblEmailIntake;
 import lk.aak.agency.intake.CblEmailIntakeLog;
+import lk.aak.agency.intake.CblProblemExplainer;
 import lk.aak.agency.service.PurchaseInvoiceFileService;
 import lk.aak.agency.dto.api.PageResponse;
 import org.springframework.core.io.Resource;
@@ -39,15 +40,28 @@ public class CblEmailInboxApiController {
 
     public record Row(Long id, LocalDateTime receivedAt, LocalDateTime lastSeenAt, int attempts, String kind, String status,
                       String fileName, Long fileSize, String emailSubject, String emailSender, LocalDateTime emailSentAt,
-                      String documentNumber, String summary, List<String> problems,
+                      String documentNumber, String summary, String headline, String whatToDo, String category, List<String> layoutWarnings,
+                      List<String> problems,
                       Long purchaseInvoiceId, boolean hasFile, boolean resolved, String resolvedBy, LocalDateTime resolvedAt,
                       String resolutionNote) {
         static Row of(CblEmailIntake e) {
             return new Row(e.getId(), e.getReceivedAt(), e.getLastSeenAt(), e.getAttempts(), e.getKind(), e.getStatus(), e.getFileName(),
                     e.getFileSize(), e.getEmailSubject(), e.getEmailSender(), e.getEmailSentAt(), e.getDocumentNumber(), e.getSummary(),
+                    explanation(e) == null ? null : explanation(e).headline(), explanation(e) == null ? null : explanation(e).whatToDo(),
+                    explanation(e) == null ? null : explanation(e).category(),
+                    e.getLayoutWarning() == null || e.getLayoutWarning().isBlank() ? List.of() : List.of(e.getLayoutWarning().split("\\R")),
                     e.getProblems() == null || e.getProblems().isBlank() ? List.of() : List.of(e.getProblems().split("\\R")),
                     e.getPurchaseInvoiceId(), e.getStoredFileName() != null, e.isResolved(), e.getResolvedBy(), e.getResolvedAt(), e.getResolutionNote());
         }
+    }
+
+    /** What an office worker needs to know about something the system could not read; null for rows that are fine. */
+    static CblProblemExplainer.Explanation explanation(CblEmailIntake e) {
+        if (!CblEmailIntake.NEEDS_ATTENTION.equals(e.getStatus())) {
+            return null;
+        }
+        List<String> problems = e.getProblems() == null || e.getProblems().isBlank() ? List.of() : List.of(e.getProblems().split("\\R"));
+        return CblProblemExplainer.explain(e.getKind(), problems);
     }
 
     public record ResolveRequest(String note) {

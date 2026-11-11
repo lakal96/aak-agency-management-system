@@ -50,6 +50,10 @@ public class CblEmailIntake {
     @Column(name = "email_sent_at")
     private LocalDateTime emailSentAt;
 
+    /** Imported, but the PDF lacked some of the usual headings: check every line against it. */
+    @Column(name = "layout_warning", length = 1000)
+    private String layoutWarning;
+
     @Column(name = "file_size")
     private Long fileSize;
 
@@ -105,6 +109,8 @@ public class CblEmailIntake {
     public void setEmailSender(String emailSender) { this.emailSender = emailSender; }
     public LocalDateTime getEmailSentAt() { return emailSentAt; }
     public void setEmailSentAt(LocalDateTime emailSentAt) { this.emailSentAt = emailSentAt; }
+    public String getLayoutWarning() { return layoutWarning; }
+    public void setLayoutWarning(String layoutWarning) { this.layoutWarning = layoutWarning; }
     public Long getFileSize() { return fileSize; }
     public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
     public String getMessageKey() { return messageKey; }

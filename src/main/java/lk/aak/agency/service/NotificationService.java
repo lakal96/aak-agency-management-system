@@ -5,6 +5,7 @@ import lk.aak.agency.credit.SupplierCreditNoteRepository;
 import lk.aak.agency.dto.api.CreditFollowUpRowResponse;
 import lk.aak.agency.intake.CblEmailIntake;
 import lk.aak.agency.intake.CblEmailIntakeLog;
+import lk.aak.agency.intake.CblProblemExplainer;
 import lk.aak.agency.model.DeliveryTrip;
 import lk.aak.agency.model.Payment;
 import lk.aak.agency.model.PurchaseInvoice;
@@ -126,14 +127,21 @@ public class NotificationService {
                 break;
             }
             String what = firstNonBlank(row.getDocumentNumber(), row.getFileName(), row.getEmailSubject(), "a CBL e-mail");
-            String why = row.getProblems() == null ? "" : row.getProblems().lines().findFirst().orElse("");
+            // in plain words for the office, not the reader's technical complaint
+            List<String> problems = row.getProblems() == null || row.getProblems().isBlank() ? List.of() : List.of(row.getProblems().split("\\R"));
+            String why = CblProblemExplainer.explain(row.getKind(), problems).headline();
             out.add(new Notification("cbl-email-" + row.getId(), DANGER, "CBL e-mail", "CBL e-mail could not be read",
-                    clip(what + (why.isBlank() ? "" : " · " + why), 160), "/cbl-emails/" + row.getId(), 1));
+                    clip(what + " · " + why, 200), "/cbl-emails/" + row.getId(), 1));
         }
         if (needing.size() > PER_KIND) {
             long more = needing.size() - PER_KIND;
             out.add(new Notification("cbl-email-more", DANGER, "CBL e-mail", more + " more CBL e-mail" + (more == 1 ? "" : "s") + " could not be read",
                     "Open the list and deal with each one", "/cbl-emails?filter=attention", more));
+        }
+        if (cblEmails.formatChanged()) {
+            out.add(new Notification("cbl-format-alarm", DANGER, "CBL e-mail", "CBL may have changed how its documents look",
+                    "Several of the latest CBL documents could not be read the usual way. Check each one against its PDF, and tell the developer",
+                    "/cbl-emails?filter=attention", 1));
         }
         if ("STALE".equals(cblEmails.summary().checkerStatus())) {
             out.add(new Notification("cbl-checker-stale", WARNING, "CBL e-mail", "The Gmail checker has stopped",
@@ -151,8 +159,10 @@ public class NotificationService {
                 break;
             }
             boolean fromEmail = "EMAIL".equalsIgnoreCase(draft.getSource());
-            out.add(new Notification("purchase-draft-" + draft.getId(), fromEmail ? WARNING : INFO, "Stock",
-                    fromEmail ? "CBL invoice arrived: count the goods and complete it" : "Purchase invoice not completed yet",
+            boolean oddLayout = fromEmail && draft.getNotes() != null && draft.getNotes().contains("LAYOUT CHECK");
+            out.add(new Notification("purchase-draft-" + draft.getId(), oddLayout ? DANGER : fromEmail ? WARNING : INFO, "Stock",
+                    oddLayout ? "CBL invoice with an unusual layout: check EVERY line against the PDF"
+                            : fromEmail ? "CBL invoice arrived: count the goods and complete it" : "Purchase invoice not completed yet",
                     draft.getDocumentNumber() + " · Rs " + money(draft.getTotalAmount()), "/purchase-invoices/" + draft.getId(), 1));
         }
         if (drafts.size() > PER_KIND) {

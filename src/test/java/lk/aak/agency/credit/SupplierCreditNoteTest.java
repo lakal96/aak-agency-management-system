@@ -268,7 +268,7 @@ class SupplierCreditNoteTest {
         assertThat(supplierPayments.getSupplierBalanceSummary().creditNotesTotal()).isEqualByComparingTo("0");
         assertThat(supplierPayments.getSupplierBalanceSummary().netOwed()).isEqualByComparingTo(owed);
 
-        service.approve(note.getId(), "owner1");
+        service.approve(note.getId(), "owner1", true);
         var summary = supplierPayments.getSupplierBalanceSummary();
         assertThat(summary.creditNotesTotal()).isEqualByComparingTo("300.00");
         assertThat(summary.totalOwed()).as("the invoices still owe the same").isEqualByComparingTo(owed);
@@ -276,10 +276,32 @@ class SupplierCreditNoteTest {
 
         // a credit bigger than everything owed shows as a credit in our favour, not as a hidden zero
         var big = service.create(num("B"), null, LocalDate.of(2026, 10, 2), owed.add(new BigDecimal("500.00")), "big", "office1");
-        service.approve(big.getId(), "owner1");
+        service.approve(big.getId(), "owner1", true);
         var after = supplierPayments.getSupplierBalanceSummary();
         assertThat(after.netOwed()).isEqualByComparingTo("0");
         assertThat(after.creditInFavour()).isEqualByComparingTo(new BigDecimal("300.00").add(owed.add(new BigDecimal("500.00"))).subtract(owed));
+    }
+
+    @Test
+    void aCreditNoteCannotBeApprovedUntilThePersonSaysTheyComparedItWithTheOriginal() throws Exception {
+        var note = service.create(num("A"), "CBL", LocalDate.of(2026, 10, 1), new BigDecimal("1000.00"), "Test", "office1");
+
+        // the service
+        assertThatThrownBy(() -> service.approve(note.getId(), "office1", false)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("tick the box");
+        assertThat(service.get(note.getId()).getStatus()).isEqualTo("DRAFT");
+
+        // the address: no body, or an unticked box, approves nothing
+        mockMvc.perform(post("/api/v1/supplier-credit-notes/" + note.getId() + "/approve").header("Authorization", "Bearer " + token("OFFICE")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/supplier-credit-notes/" + note.getId() + "/approve").header("Authorization", "Bearer " + token("OFFICE"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"verificationConfirmed\":false}"))
+                .andExpect(status().isBadRequest());
+        assertThat(service.get(note.getId()).getStatus()).isEqualTo("DRAFT");
+
+        // ticked: approved, and the audit line says it was compared
+        mockMvc.perform(post("/api/v1/supplier-credit-notes/" + note.getId() + "/approve").header("Authorization", "Bearer " + token("OFFICE"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"verificationConfirmed\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("APPROVED"));
     }
 
     @Test
@@ -293,8 +315,8 @@ class SupplierCreditNoteTest {
         assertThatThrownBy(() -> service.create(" ", null, LocalDate.of(2026, 10, 1), BigDecimal.TEN, null, "office1"))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        service.approve(note.getId(), "owner1");
-        assertThatThrownBy(() -> service.approve(note.getId(), "owner1")).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already approved");
+        service.approve(note.getId(), "owner1", true);
+        assertThatThrownBy(() -> service.approve(note.getId(), "owner1", true)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("already approved");
         assertThatThrownBy(() -> service.deleteDraft(note.getId())).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("cannot be deleted");
 
         var draft = service.create(num("D"), null, LocalDate.of(2026, 10, 1), new BigDecimal("50.00"), null, "office1");
@@ -315,7 +337,8 @@ class SupplierCreditNoteTest {
 
         mockMvc.perform(post("/api/v1/supplier-credit-notes/" + note.getId() + "/approve").header("Authorization", "Bearer " + token("SALES_REP")))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/v1/supplier-credit-notes/" + note.getId() + "/approve").header("Authorization", "Bearer " + token("OFFICE")))
+        mockMvc.perform(post("/api/v1/supplier-credit-notes/" + note.getId() + "/approve").header("Authorization", "Bearer " + token("OFFICE"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"verificationConfirmed\":true}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("APPROVED"));
 
         // the balance screen and the dashboard use the same net figure

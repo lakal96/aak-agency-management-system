@@ -141,7 +141,12 @@ public class CreditNoteParser {
         boolean closed = false;
         for (String raw : text.split("\\R")) {
             String line = raw.trim();
-            if (line.startsWith("Remarks")) { inTable = true; continue; }
+            if (line.startsWith("Remarks")) {
+                inTable = true;
+                // the heading has always read "Remarks  Amount Rs.": if the amount column is named differently the layout has changed
+                if (!line.contains("Amount")) problems.add(where + "the table headings are not the usual \"Remarks / Amount Rs.\" (\"" + line + "\"), so the layout has changed.");
+                continue;
+            }
             if (!inTable || line.isEmpty()) continue;
             if (line.toLowerCase().startsWith("this is a system generated")) { closed = true; break; }
             Matcher m = AMOUNT_LINE.matcher(line);
