@@ -91,13 +91,14 @@ public class SupplierCreditNoteService {
             note.setRefInvoiceNumber(parsed.refInvoiceNumber());
             note.setRefInvoiceDate(parsed.refInvoiceDate());
             note.setAmount(validAmount(parsed.amount()));
-            note.setRemarks(parsed.remarks().length() > 500 ? parsed.remarks().substring(0, 500) : parsed.remarks());
+            String remarks = parsed.remarks() == null ? "" : parsed.remarks();
+            note.setRemarks(remarks.isBlank() ? null : remarks.length() > 500 ? remarks.substring(0, 500) : remarks);
             note.setSource("EMAIL");
             note.setFileOriginalName(stored.originalFileName());
             note.setFileStoredName(stored.storedFileName());
             created.add(repository.save(note));
             auditLogService.recordAs(username, "SUPPLIER_CREDIT_NOTE_EMAILED", "SupplierCreditNote", note.getId(),
-                    "Draft from the e-mailed credit note " + note.getDocumentNumber() + " Rs " + note.getAmount() + " (" + note.getRemarks() + ")");
+                    "Draft from the e-mailed credit note " + note.getDocumentNumber() + " Rs " + note.getAmount() + (note.getRemarks() == null ? "" : " (" + note.getRemarks() + ")"));
         }
         return new ImportResult(created, duplicates);
     }
