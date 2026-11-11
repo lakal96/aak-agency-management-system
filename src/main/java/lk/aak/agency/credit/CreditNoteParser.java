@@ -64,6 +64,7 @@ public class CreditNoteParser {
 
         List<Note> notes = new ArrayList<>();
         List<String> problems = new ArrayList<>();
+        int documentNumbersSeen = 0;
 
         for (int i = 0; i < pages.size(); i++) {
             String text = pages.get(i);
@@ -72,21 +73,56 @@ public class CreditNoteParser {
                 problems.add("Page " + (i + 1) + " is not a credit note.");
                 continue;
             }
-            parsePage(i + 1, text, notes, problems);
+            // A page may hold ONE credit note or SEVERAL stacked under each other (CBL's file has two to a page): read each.
+            List<String> parts = splitNotes(text);
+            for (int k = 0; k < parts.size(); k++) {
+                String where = "Page " + (i + 1) + (parts.size() > 1 ? ", credit note " + (k + 1) : "") + ": ";
+                parsePage(where, parts.get(k), notes, problems);
+            }
+            documentNumbersSeen += countMatches(DOC_NO, text);
         }
         if (notes.isEmpty() && problems.isEmpty()) {
             problems.add("No credit note was found in this file.");
         }
+        // Never drop a credit note silently: every "Doc.No" in the file must have become a note, or the file is refused.
+        if (problems.isEmpty() && notes.size() != documentNumbersSeen) {
+            problems.add("The file holds " + documentNumbersSeen + " credit notes but only " + notes.size() + " could be read, so none was imported.");
+        }
         return new Parsed(List.copyOf(notes), List.copyOf(problems));
+    }
+
+    /** One piece of text per credit note: each ends at its closing sentence ("This is a system generated document..."). */
+    static List<String> splitNotes(String page) {
+        List<String> parts = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String line : page.split("\\R", -1)) {
+            current.append(line).append('\n');
+            if (line.trim().toLowerCase().startsWith("this is a system generated")) {
+                parts.add(current.toString());
+                current = new StringBuilder();
+            }
+        }
+        // text left after the last closing sentence belongs to a credit note that never closed: let the page reader complain about it
+        String rest = current.toString();
+        if (!rest.isBlank() && (DOC_NO.matcher(rest).find() || rest.contains("Credit Note"))) {
+            parts.add(rest);
+        }
+        return parts;
+    }
+
+    private static int countMatches(Pattern pattern, String text) {
+        Matcher matcher = pattern.matcher(text);
+        int count = 0;
+        while (matcher.find()) count++;
+        return count;
     }
 
     static boolean looksLikeCreditNote(String text) {
         return text.contains("Credit Note") && DOC_NO.matcher(text).find();
     }
 
-    private void parsePage(int pageNumber, String text, List<Note> notes, List<String> problems) {
+    private void parsePage(String where, String text, List<Note> notes, List<String> problems) {
 
-        String where = "Page " + pageNumber + ": ";
         String number = first(DOC_NO, text);
         LocalDate date = date(first(NOTE_DATE, text));
         if (number == null) problems.add(where + "the document number (Doc.No) was not found.");

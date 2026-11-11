@@ -118,6 +118,31 @@ class SupplierCreditNoteTest {
     }
 
     @Test
+    void severalCreditNotesStackedOnOnePageAreAllRead() {
+        // CBL's file has two credit notes to a page: reading one note per page silently dropped the second of each
+        var parsed = parser.parsePages(List.of(
+                page("26OCT_X_1", "19.10.2026", "Rebates", "2,720.00") + page("26OCT_X_2", "19.10.2026", "Rebates", "5,240.00"),
+                page("26OCT_X_3", "19.10.2026", "Cho Dis", "459,712.00") + page("26OCT_X_4", "19.10.2026", "Cho Dis", "387,199.00")));
+
+        assertThat(parsed.problems()).isEmpty();
+        assertThat(parsed.notes()).extracting(CreditNoteParser.Note::documentNumber)
+                .containsExactly("26OCT_X_1", "26OCT_X_2", "26OCT_X_3", "26OCT_X_4");
+        assertThat(parsed.notes()).extracting(n -> n.amount().toPlainString())
+                .containsExactly("2720.00", "5240.00", "459712.00", "387199.00");
+        // every note keeps its own heading, not the previous note's
+        assertThat(parsed.notes()).allSatisfy(n -> assertThat(n.issuer()).isEqualTo("Plenty Foods (Pvt) Limited"));
+    }
+
+    @Test
+    void aSecondNoteOnAPageThatCannotBeReadRefusesTheFileInsteadOfBeingDropped() {
+        var parsed = parser.parsePages(List.of(
+                page("26OCT_X_1", "19.10.2026", "Rebates", "2,720.00") + page("26OCT_X_2", "19.10.2026", "Rebates", "oops")));
+
+        assertThat(parsed.problems()).as("a file with one unreadable note is refused as a whole, not imported without it").isNotEmpty();
+        assertThat(String.join(" ", parsed.problems())).contains("Page 1, credit note 2");
+    }
+
+    @Test
     void aPageItCannotReadExactlyMakesTheWholeFileARefusal() {
         var parsed = parser.parsePages(List.of(
                 page("26SEP_X_1", "07.09.2026", "4GB DISCOUNT JULY 2026", "4,432.32"),
@@ -160,6 +185,26 @@ class SupplierCreditNoteTest {
         assertThat(more.status()).isEqualTo(CblInvoiceIntakeService.Status.CREATED);
         assertThat(more.lines()).isEqualTo(1);
         assertThat(more.notes()).anyMatch(n -> n.contains("already recorded"));
+    }
+
+    @Test
+    void aFileWithTwoNotesToAPageImportsEveryNoteAndSkipsTheOnesAlreadyKnown() throws Exception {
+        String a = num("A"), b = num("B"), c = num("C"), d = num("D");
+        // the first time only two of them were taken (the old one-note-per-page reading); now the whole file is read
+        intake.importInvoice(pdf(page(a, "19.10.2026", "Rebates", "2,720.00"), page(c, "19.10.2026", "Cho Dis", "459,712.00")), "first.pdf");
+
+        var result = intake.importInvoice(pdf(
+                page(a, "19.10.2026", "Rebates", "2,720.00") + page(b, "19.10.2026", "Rebates", "5,240.00"),
+                page(c, "19.10.2026", "Cho Dis", "459,712.00") + page(d, "19.10.2026", "Cho Dis", "387,199.00")), "both.pdf");
+
+        assertThat(result.problems()).isEmpty();
+        assertThat(result.status()).isEqualTo(CblInvoiceIntakeService.Status.CREATED);
+        assertThat(result.lines()).isEqualTo(2);
+        assertThat(result.total()).isEqualByComparingTo("392439.00");   // only the two new notes: 5,240 + 387,199 (but never the two already known)
+        assertThat(result.notes()).filteredOn(n -> n.contains("already recorded")).hasSize(2);
+        assertThat(repository.findByDocumentNumber(b).orElseThrow().getAmount()).isEqualByComparingTo("5240.00");
+        assertThat(repository.findByDocumentNumber(d).orElseThrow().getAmount()).isEqualByComparingTo("387199.00");
+        assertThat(repository.findByDocumentNumber(a).orElseThrow().getAmount()).isEqualByComparingTo("2720.00");
     }
 
     // ------------------------------------------------------------ approving changes what is owed
