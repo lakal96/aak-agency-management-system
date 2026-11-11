@@ -118,6 +118,33 @@ class SupplierCreditNoteTest {
     }
 
     @Test
+    void aCreditNoteWithABlankRemarksColumnIsReadFromTheAmountAlone() throws Exception {
+        // older CBL credit notes have nothing under "Remarks": the amount is alone on its line (two such files were refused in production)
+        var parsed = parser.parsePages(List.of(
+                page("26JUL_X_1", "15.07.2026", "", "423,773.00") + page("26JUL_X_2", "21.07.2026", "", "8,314.00"),
+                page("26JUL_X_3", "15.07.2026", "", "385,810.00")));
+
+        assertThat(parsed.problems()).isEmpty();
+        assertThat(parsed.notes()).extracting(CreditNoteParser.Note::documentNumber).containsExactly("26JUL_X_1", "26JUL_X_2", "26JUL_X_3");
+        assertThat(parsed.notes()).extracting(n -> n.amount().toPlainString()).containsExactly("423773.00", "8314.00", "385810.00");
+        assertThat(parsed.notes()).allSatisfy(n -> assertThat(n.remarks()).isEmpty());
+        // a note whose company heading fell at the bottom of the page before it still gets the company's name, not an address line
+        String tail = "CBL Foods International (Pvt) Ltd\nP.O Box 01, Habarakada Road,\nRanala\n";
+        String noHeading = page("26JUL_X_5", "15.07.2026", "", "1,000.00").replace("Plenty Foods (Pvt) Limited.\n", "");
+        var headless = parser.parsePages(List.of(page("26JUL_X_4", "15.07.2026", "", "2,000.00").replace("Plenty Foods (Pvt) Limited.", "CBL Foods International (Pvt) Ltd") + tail, noHeading));
+        assertThat(headless.problems()).isEmpty();
+        assertThat(headless.notes()).extracting(CreditNoteParser.Note::issuer).containsOnly("CBL Foods International (Pvt) Ltd");
+        // and through a real PDF into drafts, with no remarks stored
+        var viaPdf = parser.parse(pdf(page(num("B"), "15.07.2026", "", "3,480.00") + page(num("C"), "15.07.2026", "Rebates", "394,885.00"))).orElseThrow();
+        assertThat(viaPdf.problems()).isEmpty();
+        assertThat(viaPdf.notes()).extracting(n -> n.amount().toPlainString()).containsExactly("3480.00", "394885.00");
+        // a line that really is not an amount is still refused
+        var junk = parser.parsePages(List.of(page("26JUL_X_9", "15.07.2026", "", "four hundred")));
+        assertThat(junk.problems()).isNotEmpty();
+        assertThat(junk.notes()).isEmpty();
+    }
+
+    @Test
     void severalCreditNotesStackedOnOnePageAreAllRead() {
         // CBL's file has two credit notes to a page: reading one note per page silently dropped the second of each
         var parsed = parser.parsePages(List.of(

@@ -25,11 +25,14 @@ import java.util.regex.Pattern;
 public class CreditNoteParser {
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    /** The company heading, such as "CBL Foods International (Pvt) Ltd" (the address lines under it are not it). */
+    private static final Pattern COMPANY_LINE = Pattern.compile("(?i)^.*\\b(pvt|limited|ltd)\\b.*$");
     private static final Pattern DOC_NO = Pattern.compile("Doc\\.No\\.?\\s*:\\s*(\\S+)");
     private static final Pattern NOTE_DATE = Pattern.compile("(?<![A-Za-z.])Date\\s*:\\s*(\\d{2}\\.\\d{2}\\.\\d{4})");
     private static final Pattern REF_NO = Pattern.compile("Ref\\.Inv\\.No:[ \\t]*(\\S*)");
     private static final Pattern REF_DATE = Pattern.compile("Ref\\.Inv\\.Date:[ \\t]*(\\d{2}\\.\\d{2}\\.\\d{4})");
-    private static final Pattern AMOUNT_LINE = Pattern.compile("^(.+?)\\s+([\\d,]+\\.\\d{2})\\s*$");
+    // a remark text and then the amount, or just the amount when CBL left the Remarks column blank
+    private static final Pattern AMOUNT_LINE = Pattern.compile("^(?:(.*?)\\s+)?([\\d,]+\\.\\d{2})\\s*$");
 
     public record Note(String documentNumber, String issuer, LocalDate date, String refInvoiceNumber,
                        LocalDate refInvoiceDate, String remarks, BigDecimal amount) {
@@ -65,6 +68,9 @@ public class CreditNoteParser {
         List<Note> notes = new ArrayList<>();
         List<String> problems = new ArrayList<>();
         int documentNumbersSeen = 0;
+        // the heading of a note can fall at the very bottom of the previous page's text: use the file's own company name for such a note
+        String fileIssuer = pages.stream().flatMap(String::lines).map(String::trim).filter(l -> COMPANY_LINE.matcher(l).matches())
+                .map(l -> l.replaceAll("\\.$", "")).findFirst().orElse(null);
 
         for (int i = 0; i < pages.size(); i++) {
             String text = pages.get(i);
@@ -77,7 +83,7 @@ public class CreditNoteParser {
             List<String> parts = splitNotes(text);
             for (int k = 0; k < parts.size(); k++) {
                 String where = "Page " + (i + 1) + (parts.size() > 1 ? ", credit note " + (k + 1) : "") + ": ";
-                parsePage(where, parts.get(k), notes, problems);
+                parsePage(where, parts.get(k), fileIssuer, notes, problems);
             }
             documentNumbersSeen += countMatches(DOC_NO, text);
         }
@@ -121,7 +127,7 @@ public class CreditNoteParser {
         return text.contains("Credit Note") && DOC_NO.matcher(text).find();
     }
 
-    private void parsePage(String where, String text, List<Note> notes, List<String> problems) {
+    private void parsePage(String where, String text, String fileIssuer, List<Note> notes, List<String> problems) {
 
         String number = first(DOC_NO, text);
         LocalDate date = date(first(NOTE_DATE, text));
@@ -140,7 +146,7 @@ public class CreditNoteParser {
             if (line.toLowerCase().startsWith("this is a system generated")) { closed = true; break; }
             Matcher m = AMOUNT_LINE.matcher(line);
             if (m.matches()) {
-                remarks.add(m.group(1).trim());
+                if (m.group(1) != null && !m.group(1).isBlank()) remarks.add(m.group(1).trim());
                 amount = amount.add(new BigDecimal(m.group(2).replace(",", "")));
             } else {
                 problems.add(where + "a line could not be read: \"" + line + "\"");
@@ -150,8 +156,9 @@ public class CreditNoteParser {
         if (amount.signum() <= 0) problems.add(where + "no amount was found.");
         if (number == null || date == null || amount.signum() <= 0 || !problems.stream().noneMatch(p -> p.startsWith(where))) return;
 
-        String firstLine = text.lines().map(String::trim).filter(l -> !l.isEmpty()).findFirst().orElse("Supplier");
-        String issuer = firstLine.replaceAll("\\.$", "");
+        String issuer = text.lines().map(String::trim).filter(l -> COMPANY_LINE.matcher(l).matches()).map(l -> l.replaceAll("\\.$", "")).findFirst()
+                .orElseGet(() -> fileIssuer != null ? fileIssuer
+                        : text.lines().map(String::trim).filter(l -> !l.isEmpty()).findFirst().orElse("Supplier").replaceAll("\\.$", ""));
         String refNo = first(REF_NO, text);
         notes.add(new Note(number, issuer, date, refNo == null || refNo.isBlank() ? null : refNo, date(first(REF_DATE, text)),
                 String.join("; ", remarks), amount));
