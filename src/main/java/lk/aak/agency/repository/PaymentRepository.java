@@ -21,6 +21,11 @@ public interface PaymentRepository
 
     List<Payment> findAllByOrderByPaymentDateDesc();
 
+    /** Money collected in the field since a date (the hand-over reminder looks at the last few weeks only). */
+    List<Payment> findByCollectedByEmployeeIdIsNotNullAndPaymentDateGreaterThanEqual(LocalDate since);
+
+    List<Payment> findByPaymentMethodIgnoreCaseAndChequeStatusIgnoreCaseOrderByPaymentDateDesc(String paymentMethod, String chequeStatus);
+
     /*
      * Paginated list, optionally filtered by receipt number, invoice number,
      * customer name/area, payment method or reference number.

@@ -71,6 +71,8 @@ public interface SalesInvoiceRepository
 
     boolean existsByCustomerId(Long customerId);
 
+    List<SalesInvoice> findByStatusOrderByIdDesc(String status);
+
     /*
      * Completed bills not yet assigned to any delivery trip - eligible for loading.
      */

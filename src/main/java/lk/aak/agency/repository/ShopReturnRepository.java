@@ -14,6 +14,8 @@ public interface ShopReturnRepository extends JpaRepository<ShopReturn, Long> {
 
     List<ShopReturn> findAllByOrderByReturnDateDesc();
 
+    List<ShopReturn> findByStatusOrderByIdDesc(String status);
+
     List<ShopReturn> findByCustomerIdOrderByReturnDateDesc(Long customerId);
 
     boolean existsByCustomerId(Long customerId);

@@ -8,4 +8,6 @@ import java.util.List;
 public interface SupplierReturnRepository extends JpaRepository<SupplierReturn, Long> {
 
     List<SupplierReturn> findAllByOrderByReturnDateDesc();
+
+    List<SupplierReturn> findByStatusOrderByIdDesc(String status);
 }
