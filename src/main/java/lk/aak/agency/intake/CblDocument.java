@@ -8,7 +8,12 @@ import java.util.List;
 public record CblDocument(
         Kind kind,
         Invoice invoice,
-        List<String> problems) {
+        List<String> problems,
+        List<String> layoutWarnings) {
+
+    public CblDocument(Kind kind, Invoice invoice, List<String> problems) {
+        this(kind, invoice, problems, List.of());
+    }
 
     public enum Kind { INVOICE, UNKNOWN }
 

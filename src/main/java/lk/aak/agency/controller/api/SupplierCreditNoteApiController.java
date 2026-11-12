@@ -72,9 +72,13 @@ public class SupplierCreditNoteApiController {
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.of(note));
     }
 
+    /** The person ticks "I compared it with the original": without that tick nothing is approved. */
+    public record ApproveRequest(boolean verificationConfirmed) {
+    }
+
     @PostMapping("/{id}/approve")
-    public Response approve(@PathVariable Long id, Principal principal) {
-        return Response.of(service.approve(id, principal == null ? "unknown" : principal.getName()));
+    public Response approve(@PathVariable Long id, @RequestBody(required = false) ApproveRequest request, Principal principal) {
+        return Response.of(service.approve(id, principal == null ? "unknown" : principal.getName(), request != null && request.verificationConfirmed()));
     }
 
     @DeleteMapping("/{id}")

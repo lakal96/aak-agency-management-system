@@ -25,6 +25,9 @@ public interface CblEmailIntakeRepository extends JpaRepository<CblEmailIntake, 
 
     long countByStatus(String status);
 
+    /** The newest records that are not "nothing to import" (those are not documents): what the format-change alarm looks at. */
+    List<CblEmailIntake> findTop6ByStatusNotOrderByIdDesc(String status);
+
     long countByStatusAndResolvedTrue(String status);
 
     /**

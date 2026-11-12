@@ -36,7 +36,17 @@ public class CblInvoiceIntakeService {
 
     /** `kind` says what the file was: INVOICE (a product invoice) or CREDIT_NOTES (one or more supplier credit notes). */
     public record Result(Status status, Long invoiceId, String documentNumber, int lines, BigDecimal total,
-                         List<String> notes, List<String> problems, String kind) {
+                         List<String> notes, List<String> problems, String kind, List<String> layoutWarnings) {
+
+        /** Without layout warnings (everything except an invoice whose usual headings are missing). */
+        public Result(Status status, Long invoiceId, String documentNumber, int lines, BigDecimal total,
+                      List<String> notes, List<String> problems, String kind) {
+            this(status, invoiceId, documentNumber, lines, total, notes, problems, kind, List.of());
+        }
+
+        public Result withLayoutWarnings(List<String> warnings) {
+            return new Result(status, invoiceId, documentNumber, lines, total, notes, problems, kind, warnings == null ? List.of() : List.copyOf(warnings));
+        }
 
         public Result(Status status, Long invoiceId, String documentNumber, int lines, BigDecimal total,
                       List<String> notes, List<String> problems) {
@@ -109,7 +119,7 @@ public class CblInvoiceIntakeService {
             }
             try {
                 // all or nothing: the draft, its lines, any new products and the attached PDF
-                return transaction.execute(status -> createDraft(parsed, pdf, fileName));
+                return transaction.execute(status -> createDraft(parsed, pdf, fileName, document.layoutWarnings()));
             } catch (IllegalArgumentException | IllegalStateException refused) {
                 return rejected(parsed.taxInvoiceNumber(), List.of(String.valueOf(refused.getMessage())));
             } catch (org.springframework.dao.DataIntegrityViolationException duplicate) {
@@ -118,9 +128,11 @@ public class CblInvoiceIntakeService {
         }
     }
 
-    private Result createDraft(CblDocument.Invoice parsed, byte[] pdf, String fileName) {
+    private Result createDraft(CblDocument.Invoice parsed, byte[] pdf, String fileName, List<String> layoutWarnings) {
 
         List<String> notes = new ArrayList<>();
+        // the usual headings are not all there: the draft says so at the top of its notes, where the person doing the goods check will see it
+        for (String warning : layoutWarnings) notes.add("LAYOUT CHECK: " + warning + " Compare EVERY line and the total with the PDF before completing.");
         List<PurchaseInvoiceItem> items = new ArrayList<>();
         List<String> created = new ArrayList<>();
         List<String> adopted = new ArrayList<>();
@@ -175,7 +187,7 @@ public class CblInvoiceIntakeService {
         auditLogService.recordAs(INTAKE_USER, "PURCHASE_INVOICE_EMAILED", "PurchaseInvoice", saved.getId(),
                 "Draft made from the e-mailed CBL invoice " + parsed.taxInvoiceNumber() + " (" + items.size() + " lines, total " + saved.getTotalAmount() + ")");
 
-        return new Result(Status.CREATED, saved.getId(), saved.getDocumentNumber(), items.size(), saved.getTotalAmount(), notes, List.of());
+        return new Result(Status.CREATED, saved.getId(), saved.getDocumentNumber(), items.size(), saved.getTotalAmount(), notes, List.of()).withLayoutWarnings(layoutWarnings);
     }
 
     /** By CBL code; else a product still on a TEMP code with exactly this name (it gets the real code); else a new one. */
@@ -255,8 +267,9 @@ public class CblInvoiceIntakeService {
                 List<String> notes = new ArrayList<>();
                 BigDecimal total = BigDecimal.ZERO;
                 for (var note : outcome.created()) {
-                    notes.add("Credit note " + note.getDocumentNumber() + " Rs " + note.getAmount().toPlainString() + " (" + note.getRemarks()
-                            + "): draft made. Check it and approve it under Supplier balance.");
+                    notes.add("Credit note " + note.getDocumentNumber() + " Rs " + note.getAmount().toPlainString()
+                            + (note.getRemarks() == null || note.getRemarks().isBlank() ? "" : " (" + note.getRemarks() + ")")
+                            + ": draft made. Check it and approve it under Supplier balance.");
                     total = total.add(note.getAmount());
                 }
                 for (String duplicate : outcome.duplicates()) {

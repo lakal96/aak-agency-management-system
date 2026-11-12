@@ -146,7 +146,7 @@ public class CblInvoiceParser {
                 taxNumber, invoiceDate, supplyDate, first(PO, text), clean(first(DELIVERY_NOTE, text)),
                 first(TERRITORY, text), first(PLACE, text), first(PAYMENT, text),
                 totalOrder, discount, supplyTotal, inclVat, List.copyOf(lines));
-        return new CblDocument(CblDocument.Kind.INVOICE, invoice, List.copyOf(problems));
+        return new CblDocument(CblDocument.Kind.INVOICE, invoice, List.copyOf(problems), CblLayoutCheck.invoiceWarnings(text));
     }
 
     private CblDocument.Line toLine(Matcher m, String rawDescription, List<String> problems, Function<String, String> productNameByCode) {

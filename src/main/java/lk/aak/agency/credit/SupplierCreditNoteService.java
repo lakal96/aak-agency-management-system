@@ -103,9 +103,15 @@ public class SupplierCreditNoteService {
         return new ImportResult(created, duplicates);
     }
 
-    /** A person has compared the note with the original and approves it: from now it reduces what is owed. */
+    /**
+     * A person has compared the note with the original and approves it: from now it reduces what is owed. The reader can be wrong if CBL changes how its
+     * credit notes look, so the person must say, each time, that they compared the figures with the original (the system cannot check the amount itself).
+     */
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public SupplierCreditNote approve(Long id, String username) {
+    public SupplierCreditNote approve(Long id, String username, boolean comparedWithOriginal) {
+        if (!comparedWithOriginal) {
+            throw new IllegalArgumentException("Compare the credit note's number, date and amount with the original (the PDF or the paper from CBL), then tick the box to approve it.");
+        }
         SupplierCreditNote note = repository.findByIdForUpdate(id).orElseThrow(() -> new IllegalArgumentException("Credit note not found."));
         if (SupplierCreditNote.APPROVED.equals(note.getStatus())) {
             throw new IllegalArgumentException("This credit note is already approved.");
@@ -115,7 +121,7 @@ public class SupplierCreditNoteService {
         note.setApprovedAt(BusinessTime.now());
         SupplierCreditNote saved = repository.save(note);
         auditLogService.record("SUPPLIER_CREDIT_NOTE_APPROVED", "SupplierCreditNote", id,
-                "Approved credit note " + note.getDocumentNumber() + " Rs " + note.getAmount());
+                "Approved credit note " + note.getDocumentNumber() + " Rs " + note.getAmount() + " (compared with the original by " + username + ")");
         return saved;
     }
 

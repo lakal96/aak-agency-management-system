@@ -45,7 +45,8 @@ public class CblEmailIntakeLog {
     public record Counts(long all, long attention, long imported, long handled, long empty) {
     }
 
-    public record Summary(long needsAttention, LocalDateTime lastImportedAt, LocalDateTime lastCheckedAt, String checkerStatus) {
+    /** formatChanged: several of the latest CBL documents could not be read the usual way, or were read from an unusual layout. */
+    public record Summary(long needsAttention, LocalDateTime lastImportedAt, LocalDateTime lastCheckedAt, String checkerStatus, boolean formatChanged) {
     }
 
     private final CblEmailIntakeRepository repository;
@@ -82,6 +83,9 @@ public class CblEmailIntakeLog {
                     keepFile(row, pdf, fileName);
                     row.setDocumentNumber(result.documentNumber());
                     row.setPurchaseInvoiceId(result.invoiceId());
+                    if (result.layoutWarnings() != null && !result.layoutWarnings().isEmpty()) {
+                        row.setLayoutWarning(clip(String.join("\n", result.layoutWarnings()), 1000));
+                    }
                     row.setSummary(credit
                             ? result.lines() + " credit note" + (result.lines() == 1 ? "" : "s") + " made as drafts, Rs " + plain(result.total())
                             : "Draft purchase invoice: " + result.lines() + " lines, Rs " + plain(result.total()));
@@ -155,7 +159,34 @@ public class CblEmailIntakeLog {
         LocalDateTime lastChecked = heartbeats.findById(CHECKER).map(IntegrationHeartbeat::getLastSeenAt).orElse(null);
         String checker = lastChecked == null ? "NEVER"
                 : Duration.between(lastChecked, BusinessTime.now()).compareTo(CHECKER_STALE_AFTER) > 0 ? "STALE" : "OK";
-        return new Summary(repository.countByStatusAndResolvedFalse(CblEmailIntake.NEEDS_ATTENTION), lastImported, lastChecked, checker);
+        return new Summary(repository.countByStatusAndResolvedFalse(CblEmailIntake.NEEDS_ATTENTION), lastImported, lastChecked, checker, formatChanged());
+    }
+
+    /** How many of the last documents show signs that CBL changed how they look; this many means the alarm goes up. */
+    static final int ALARM_WINDOW = 6;
+    static final int ALARM_AT = 3;
+
+    /** Whether this record points at a format change: a PDF the reader could not read the usual way (and nobody has dealt with yet), a kind of document it does not know, or an unusual layout. */
+    static boolean pointsAtFormatChange(CblEmailIntake row) {
+        if (row.getLayoutWarning() != null && !row.getLayoutWarning().isBlank()) {
+            return true;
+        }
+        // something a person has already dealt with and marked handled no longer counts
+        if (!CblEmailIntake.NEEDS_ATTENTION.equals(row.getStatus()) || row.isResolved()) {
+            return false;
+        }
+        List<String> problems = row.getProblems() == null || row.getProblems().isBlank() ? List.of() : List.of(row.getProblems().split("\\R"));
+        return CblProblemExplainer.pointsAtFormatChange(CblProblemExplainer.explain(row.getKind(), problems).category());
+    }
+
+    /**
+     * The alarm: at least ALARM_AT of the latest ALARM_WINDOW documents point at a format change. A single odd PDF is a PDF; a run of them is CBL.
+     * It clears by itself as normal documents arrive.
+     */
+    @Transactional(readOnly = true)
+    public boolean formatChanged() {
+        return repository.findTop6ByStatusNotOrderByIdDesc(CblEmailIntake.EMPTY).stream()
+                .limit(ALARM_WINDOW).filter(CblEmailIntakeLog::pointsAtFormatChange).count() >= ALARM_AT;
     }
 
     @Transactional(readOnly = true)
