@@ -30,10 +30,13 @@ public final class ControlDtos {
 
     public record Counts(int failing, int acknowledged, int waiting, int passing) { }
 
+    /** A product and its balance from the uploaded Stock Balance Report (so the portal can list the products the system knows). */
+    public record SystemStockRow(String product, int quantity) { }
+
     public record LorryView(LocalDate date, String vehicle, boolean vanSales, boolean hasPaper, String repName, String driverName,
                             BigDecimal cashCountedRep, BigDecimal cashCountedDriver, String tabletStockMorning, String tabletStockAfter,
                             String morningStockOk, List<BillIn> bills, List<StockIn> stock, List<UploadView> uploads,
-                            List<CheckView> checks, Counts counts, String updatedBy, LocalDateTime updatedAt) { }
+                            List<CheckView> checks, Counts counts, List<SystemStockRow> systemStock, String updatedBy, LocalDateTime updatedAt) { }
 
     public record BookView(LocalDate date, BigDecimal safeOpening, BigDecimal banked, BigDecimal paidOut, BigDecimal safeCounted,
                            boolean dayEndDone, String signedBy, LocalDateTime signedAt, BigDecimal cashCountedAll, List<CheckView> checks, Counts counts) { }

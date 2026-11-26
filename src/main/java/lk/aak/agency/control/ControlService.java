@@ -324,6 +324,7 @@ public class ControlService {
         return new LorryView(date, vehicle.code(), vehicle.vanSales(), day != null, day == null ? null : day.getRepName(), day == null ? null : day.getDriverName(),
                 day == null ? null : day.getCashCountedRep(), day == null ? null : day.getCashCountedDriver(), day == null ? null : day.getTabletStockMorning(),
                 day == null ? null : day.getTabletStockAfter(), day == null ? null : day.getMorningStockOk(), billsOut, stockOut, uploadViews, checks, counts(checks),
+                stock == null ? List.of() : stock.stream().map(r -> new SystemStockRow(r.sku(), r.quantity())).toList(),
                 day == null ? null : day.getUpdatedBy(), day == null ? null : day.getUpdatedAt());
     }
 
