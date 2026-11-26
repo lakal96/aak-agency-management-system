@@ -85,6 +85,9 @@ public class ApiSecurityConfig {
                                 "/api/v1/purchase-invoices/email-intake/unread", "/api/v1/purchase-invoices/email-intake/heartbeat").permitAll()
                         /* The CBL e-mail box (what arrived, what needs attention): office and owner only, never a sales rep. */
                         .requestMatchers("/api/v1/cbl-email-intake/**").hasAnyRole("ADMIN", "OFFICE")
+                        /* The Control module: the dashboard (acknowledging, signing) is the owner's; the portal is owner and office. */
+                        .requestMatchers("/api/v1/control/dashboard/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/control/**").hasAnyRole("ADMIN", "OFFICE")
                         .requestMatchers("/api/v1/users/**", "/api/v1/audit-log/**").hasRole("ADMIN")
                         /*
                          * Approving or rejecting a return changes stock and what is owed, so it is
