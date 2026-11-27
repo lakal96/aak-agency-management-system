@@ -1,6 +1,8 @@
 package lk.aak.agency.service;
 
 import lk.aak.agency.controller.api.CustomerApiController;
+import lk.aak.agency.control.ControlTaskDtos;
+import lk.aak.agency.control.ControlTaskService;
 import lk.aak.agency.credit.SupplierCreditNoteRepository;
 import lk.aak.agency.dto.api.CreditFollowUpRowResponse;
 import lk.aak.agency.intake.CblEmailIntake;
@@ -64,13 +66,15 @@ public class NotificationService {
     private final ShopReturnRepository shopReturnRepository;
     private final SupplierReturnRepository supplierReturnRepository;
     private final SalesRepScopeService salesRepScopeService;
+    private final ControlTaskService controlTasks;
 
     public NotificationService(CblEmailIntakeLog cblEmails, PurchaseInvoiceRepository purchaseInvoiceRepository,
                                SupplierCreditNoteRepository creditNoteRepository, ProductRepository productRepository,
                                InventoryService inventoryService, CustomerApiController customerApiController,
                                PaymentRepository paymentRepository, DeliveryTripRepository deliveryTripRepository,
                                SalesInvoiceRepository salesInvoiceRepository, ShopReturnRepository shopReturnRepository,
-                               SupplierReturnRepository supplierReturnRepository, SalesRepScopeService salesRepScopeService) {
+                               SupplierReturnRepository supplierReturnRepository, SalesRepScopeService salesRepScopeService,
+                               ControlTaskService controlTasks) {
         this.cblEmails = cblEmails;
         this.purchaseInvoiceRepository = purchaseInvoiceRepository;
         this.creditNoteRepository = creditNoteRepository;
@@ -83,6 +87,7 @@ public class NotificationService {
         this.shopReturnRepository = shopReturnRepository;
         this.supplierReturnRepository = supplierReturnRepository;
         this.salesRepScopeService = salesRepScopeService;
+        this.controlTasks = controlTasks;
     }
 
     @Transactional(readOnly = true)
@@ -95,6 +100,7 @@ public class NotificationService {
         List<Notification> all = new ArrayList<>();
         if (office) {
             cblEmailNotifications(all);
+            controlTaskNotifications(all);
             draftPurchaseInvoices(all);
             creditNotesWaiting(all);
             newProductsNeedPrice(all);
@@ -146,6 +152,22 @@ public class NotificationService {
         if ("STALE".equals(cblEmails.summary().checkerStatus())) {
             out.add(new Notification("cbl-checker-stale", WARNING, "CBL e-mail", "The Gmail checker has stopped",
                     "No report from the Gmail script for over 3 hours: new CBL e-mails may be waiting", "/cbl-emails", 1));
+        }
+    }
+
+    // ---- The Control to-do list ------------------------------------------------------------------------------------
+
+    /** Days of Connect Plus work still not done (from the restart date), and how today is going. */
+    private void controlTaskNotifications(List<Notification> out) {
+        ControlTaskDtos.Progress p = controlTasks.progress();
+        if (p.overdueTasks() > 0) {
+            out.add(new Notification("control-overdue", DANGER, "Control", p.overdueTasks() + " Connect Plus task" + (p.overdueTasks() == 1 ? " is" : "s are") + " overdue",
+                    "On " + p.overdueDays() + (p.overdueDays() == 1 ? " day" : " days") + ", the oldest is " + p.oldestOverdue() + ". Redo the days in order, oldest first.",
+                    "/control?date=" + p.oldestOverdue(), p.overdueTasks()));
+        }
+        if (p.todayRequired() > p.todayDone()) {
+            out.add(new Notification("control-today", INFO, "Control", "Today's tasks: " + p.todayDone() + " of " + p.todayRequired() + " done",
+                    "Open the Control calendar for today", "/control", p.todayRequired() - p.todayDone()));
         }
     }
 
