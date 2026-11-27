@@ -2,6 +2,10 @@ package lk.aak.agency.controller.api;
 
 import lk.aak.agency.control.ControlDtos.*;
 import lk.aak.agency.control.ControlService;
+import lk.aak.agency.control.ControlTaskDtos.BillsRequest;
+import lk.aak.agency.control.ControlTaskDtos.CashRequest;
+import lk.aak.agency.control.ControlTaskDtos.StockRequest;
+import lk.aak.agency.control.ControlTaskDtos.TabletRequest;
 import lk.aak.agency.control.ControlVehicles.Vehicle;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -43,6 +47,32 @@ public class ControlApiController {
     public LorryView saveLorry(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, @PathVariable String vehicle,
                                @RequestBody LorryRequest request, Principal principal) {
         return service.saveLorry(date, vehicle, request, name(principal));
+    }
+
+    // each task form saves one part of the lorry's file
+
+    @PutMapping("/days/{date}/lorries/{vehicle}/bills")
+    public LorryView saveBills(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, @PathVariable String vehicle,
+                               @RequestBody BillsRequest request, Principal principal) {
+        return service.saveBills(date, vehicle, request.repName(), request.driverName(), request.bills(), name(principal));
+    }
+
+    @PutMapping("/days/{date}/lorries/{vehicle}/cash")
+    public LorryView saveCash(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, @PathVariable String vehicle,
+                              @RequestBody CashRequest request, Principal principal) {
+        return service.saveCash(date, vehicle, request.cashCountedRep(), request.cashCountedDriver(), name(principal));
+    }
+
+    @PutMapping("/days/{date}/lorries/{vehicle}/tablet")
+    public LorryView saveTablet(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, @PathVariable String vehicle,
+                                @RequestBody TabletRequest request, Principal principal) {
+        return service.saveTablet(date, vehicle, request.tabletStockMorning(), request.morningStockOk(), request.tabletStockAfter(), name(principal));
+    }
+
+    @PutMapping("/days/{date}/lorries/{vehicle}/stock")
+    public LorryView saveStock(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, @PathVariable String vehicle,
+                               @RequestBody StockRequest request, Principal principal) {
+        return service.saveStock(date, vehicle, request.stock(), request.tabletStockAfter(), name(principal));
     }
 
     @PostMapping("/days/{date}/lorries/{vehicle}/uploads")

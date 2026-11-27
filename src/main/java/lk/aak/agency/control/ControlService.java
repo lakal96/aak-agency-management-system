@@ -36,6 +36,8 @@ import java.util.UUID;
 public class ControlService {
 
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("999999999.99");
+    /** The vehicle code under which a check of the whole day (the safe, Day End) is acknowledged. */
+    public static final String BOOK_SCOPE = "ALL";
     private static final int MAX_BILLS = 80;
     private static final int MAX_STOCK_LINES = 200;
     private static final Set<LocalDate> POYA_DAYS = Set.of(LocalDate.of(2026, 11, 24), LocalDate.of(2026, 12, 23));
@@ -91,8 +93,6 @@ public class ControlService {
         if (request == null) throw new IllegalArgumentException("Nothing to save.");
         List<BillIn> bills = request.bills() == null ? List.of() : request.bills();
         List<StockIn> stock = request.stock() == null ? List.of() : request.stock();
-        if (bills.size() > MAX_BILLS) throw new IllegalArgumentException("A lorry sheet holds at most " + MAX_BILLS + " bills.");
-        if (stock.size() > MAX_STOCK_LINES) throw new IllegalArgumentException("A stock count holds at most " + MAX_STOCK_LINES + " products.");
 
         ControlLorryDay day = lorryDays.findByControlDateAndVehicleCode(date, vehicle.code()).orElseGet(() -> new ControlLorryDay(date, vehicle.code()));
         day.setRepName(clean(request.repName(), 100));
@@ -104,6 +104,17 @@ public class ControlService {
         day.setMorningStockOk(yesNo(request.morningStockOk()));
         day.touch(username);
 
+        int n = applyBills(day, bills);
+        int s = applyStock(day, stock);
+        lorryDays.save(day);
+        audit.record("CONTROL_SAVE", "ControlLorryDay", day.getId(), vehicle.code() + " " + date + ": " + n + " bills, " + s + " stock lines");
+        return lorry(date, vehicle.code());
+    }
+
+
+    /** Replaces the bill lines of the day. Returns how many were kept. */
+    private int applyBills(ControlLorryDay day, List<BillIn> bills) {
+        if (bills.size() > MAX_BILLS) throw new IllegalArgumentException("A lorry sheet holds at most " + MAX_BILLS + " bills.");
         day.getBills().clear();
         Set<String> seen = new java.util.HashSet<>();
         int n = 0;
@@ -116,6 +127,12 @@ public class ControlService {
             day.getBills().add(new ControlBillLine(day, ++n, no, amount(b.billValue(), "Bill value of " + no), amount(b.cashRep(), "Cash (rep) of " + no),
                     amount(b.cashDriver(), "Cash (driver) of " + no), amount(b.chequeAmount(), "Cheque of " + no), clean(b.chequeNo(), 40), amount(b.creditAmount(), "Credit of " + no)));
         }
+        return n;
+    }
+
+    /** Replaces the stock lines of the day. Returns how many were kept. */
+    private int applyStock(ControlLorryDay day, List<StockIn> stock) {
+        if (stock.size() > MAX_STOCK_LINES) throw new IllegalArgumentException("A stock count holds at most " + MAX_STOCK_LINES + " products.");
         day.getStock().clear();
         int s = 0;
         for (StockIn l : stock) {
@@ -125,8 +142,67 @@ public class ControlService {
             if ((l.counted() != null && l.counted() < 0) || (l.loadTomorrow() != null && l.loadTomorrow() < 0)) throw new IllegalArgumentException("Stock numbers cannot be negative (" + name + ").");
             day.getStock().add(new ControlStockLine(day, ++s, name, l.counted(), l.loadTomorrow()));
         }
+        return s;
+    }
+
+    private ControlLorryDay dayFor(LocalDate date, Vehicle vehicle) {
+        return lorryDays.findByControlDateAndVehicleCode(date, vehicle.code()).orElseGet(() -> new ControlLorryDay(date, vehicle.code()));
+    }
+
+    // ---------------------------------------------------------------- one part of the lorry's file (the task forms save one part each)
+
+    @Transactional
+    public LorryView saveBills(LocalDate date, String vehicleCode, String repName, String driverName, List<BillIn> bills, String username) {
+        Vehicle vehicle = vehicleOf(vehicleCode);
+        checkDate(date);
+        ControlLorryDay day = dayFor(date, vehicle);
+        day.setRepName(clean(repName, 100));
+        day.setDriverName(clean(driverName, 100));
+        int n = applyBills(day, bills == null ? List.of() : bills);
+        day.touch(username);
         lorryDays.save(day);
-        audit.record("CONTROL_SAVE", "ControlLorryDay", day.getId(), vehicle.code() + " " + date + ": " + n + " bills, " + s + " stock lines");
+        audit.record("CONTROL_BILLS", "ControlLorryDay", day.getId(), vehicle.code() + " " + date + ": " + n + " bills");
+        return lorry(date, vehicle.code());
+    }
+
+    @Transactional
+    public LorryView saveCash(LocalDate date, String vehicleCode, BigDecimal countedRep, BigDecimal countedDriver, String username) {
+        Vehicle vehicle = vehicleOf(vehicleCode);
+        checkDate(date);
+        ControlLorryDay day = dayFor(date, vehicle);
+        day.setCashCountedRep(amount(countedRep, "Cash counted (rep)"));
+        day.setCashCountedDriver(amount(countedDriver, "Cash counted (driver)"));
+        day.touch(username);
+        lorryDays.save(day);
+        audit.record("CONTROL_CASH", "ControlLorryDay", day.getId(), vehicle.code() + " " + date + ": counted " + countedRep + " / " + countedDriver);
+        return lorry(date, vehicle.code());
+    }
+
+    /** The tablet answers: a null answer leaves that answer as it is, an empty one clears it. */
+    @Transactional
+    public LorryView saveTablet(LocalDate date, String vehicleCode, String morning, String morningOk, String after, String username) {
+        Vehicle vehicle = vehicleOf(vehicleCode);
+        checkDate(date);
+        ControlLorryDay day = dayFor(date, vehicle);
+        if (morning != null) day.setTabletStockMorning(yesNo(morning));
+        if (morningOk != null) day.setMorningStockOk(yesNo(morningOk));
+        if (after != null) day.setTabletStockAfter(yesNo(after));
+        day.touch(username);
+        lorryDays.save(day);
+        audit.record("CONTROL_TABLET", "ControlLorryDay", day.getId(), vehicle.code() + " " + date + ": tablet answers");
+        return lorry(date, vehicle.code());
+    }
+
+    @Transactional
+    public LorryView saveStock(LocalDate date, String vehicleCode, List<StockIn> stock, String tabletAfter, String username) {
+        Vehicle vehicle = vehicleOf(vehicleCode);
+        checkDate(date);
+        ControlLorryDay day = dayFor(date, vehicle);
+        int s = applyStock(day, stock == null ? List.of() : stock);
+        if (tabletAfter != null) day.setTabletStockAfter(yesNo(tabletAfter));
+        day.touch(username);
+        lorryDays.save(day);
+        audit.record("CONTROL_STOCK", "ControlLorryDay", day.getId(), vehicle.code() + " " + date + ": " + s + " stock lines");
         return lorry(date, vehicle.code());
     }
 
@@ -193,7 +269,7 @@ public class ControlService {
     @Transactional(readOnly = true)
     public BookView book(LocalDate date) {
         checkDate(date);
-        return buildBook(date, dayBooks.findByControlDate(date).orElse(null), lorryDays.findByControlDate(date));
+        return buildBook(date, dayBooks.findByControlDate(date).orElse(null), lorryDays.findByControlDate(date), closures.findByControlDateAndVehicleCode(date, BOOK_SCOPE));
     }
 
     @Transactional
@@ -242,6 +318,21 @@ public class ControlService {
         return lorry(date, vehicle.code());
     }
 
+    /** Acknowledges a failing check of the whole day (the safe), with a note. */
+    @Transactional
+    public BookView closeBook(LocalDate date, String checkCode, String note, String username) {
+        BookView view = book(date);
+        CheckView check = view.checks().stream().filter(c -> c.code().equals(checkCode)).findFirst().orElseThrow(() -> new IllegalArgumentException("That check does not exist."));
+        if (!ControlChecks.FAIL.equals(check.status())) throw new IllegalArgumentException("Only a check that does not agree can be acknowledged.");
+        String text = clean(note, 500);
+        if (text == null) throw new IllegalArgumentException("Write a note: what is the reason, and what was decided?");
+        closures.findByControlDateAndVehicleCodeAndCheckCode(date, BOOK_SCOPE, checkCode).ifPresent(closures::delete);
+        closures.flush();
+        closures.save(new ControlClosure(date, BOOK_SCOPE, checkCode, text, username));
+        audit.record("CONTROL_ACK", "ControlClosure", null, "ALL " + date + " " + checkCode + ": " + text);
+        return book(date);
+    }
+
     // ---------------------------------------------------------------- the day, and a range of days
 
     @Transactional(readOnly = true)
@@ -286,7 +377,7 @@ public class ControlService {
                         view.counts(), light(view.counts()), view.checks().stream().filter(c -> c.status().equals(ControlChecks.FAIL)).toList()));
             }
             ControlDayBook book = books.get(date);
-            BookView bookView = buildBook(date, book, paperDays);
+            BookView bookView = buildBook(date, book, paperDays, cls.getOrDefault(date + "|" + BOOK_SCOPE, List.of()));
             String closed = closedReason(date);
             boolean missing = closed == null && lorries.isEmpty() && book == null;
             String light = missing ? "RED" : lorries.isEmpty() && book == null ? "GREY" : worst(lorries.stream().map(LorrySummary::light).toList(), light(bookView.counts()));
@@ -345,12 +436,12 @@ public class ControlService {
         }
     }
 
-    private BookView buildBook(LocalDate date, ControlDayBook book, List<ControlLorryDay> lorries) {
+    private BookView buildBook(LocalDate date, ControlDayBook book, List<ControlLorryDay> lorries, List<ControlClosure> cls) {
         BigDecimal counted = BigDecimal.ZERO;
         for (ControlLorryDay d : lorries) counted = counted.add(ControlChecks.z(d.getCashCountedRep())).add(ControlChecks.z(d.getCashCountedDriver()));
         List<CheckView> checks = new ArrayList<>();
         for (Result r : ControlChecks.book(book == null ? null : book.getSafeOpening(), counted, book == null ? null : book.getBanked(),
-                book == null ? null : book.getPaidOut(), book == null ? null : book.getSafeCounted(), book != null && book.isDayEndDone())) checks.add(view(r, List.of()));
+                book == null ? null : book.getPaidOut(), book == null ? null : book.getSafeCounted(), book != null && book.isDayEndDone())) checks.add(view(r, cls));
         return new BookView(date, book == null ? null : book.getSafeOpening(), book == null ? null : book.getBanked(), book == null ? null : book.getPaidOut(),
                 book == null ? null : book.getSafeCounted(), book != null && book.isDayEndDone(), book == null ? null : book.getSignedBy(), book == null ? null : book.getSignedAt(),
                 counted, checks, counts(checks));
